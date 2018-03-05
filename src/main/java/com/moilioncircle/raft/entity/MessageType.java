@@ -16,7 +16,6 @@
 
 package com.moilioncircle.raft.entity;
 
-
 import com.moilioncircle.raft.entity.proto.RaftProto;
 
 /**
@@ -99,6 +98,27 @@ public enum MessageType {
                 return UNRECOGNIZED;
             default:
                 return UNRECOGNIZED;
+        }
+    }
+
+    public static boolean isLocalMsg(MessageType msgt) {
+        return msgt == MsgHup || msgt == MsgBeat || msgt == MsgUnreachable ||
+            msgt == MsgSnapStatus || msgt == MsgCheckQuorum;
+    }
+
+    public static boolean isResponseMsg(MessageType msgt) {
+        return msgt == MsgAppResp || msgt == MsgVoteResp || msgt == MsgHeartbeatResp ||
+            msgt == MsgUnreachable || msgt == MsgPreVoteResp;
+    }
+
+    public static MessageType voteRespMsgType(MessageType msgt) {
+        switch (msgt) {
+            case MsgVote:
+                return MsgVoteResp;
+            case MsgPreVote:
+                return MsgPreVoteResp;
+            default:
+                throw new AssertionError("not a vote message: " + msgt);
         }
     }
 }
