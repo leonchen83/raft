@@ -1,7 +1,10 @@
 package com.moilioncircle.raft;
 
-import com.google.protobuf.ByteString;
-import com.moilioncircle.raft.pb.RaftPb;
+import com.moilioncircle.raft.entity.ConfState;
+import com.moilioncircle.raft.entity.Entry;
+import com.moilioncircle.raft.entity.HardState;
+import com.moilioncircle.raft.entity.Snapshot;
+import com.moilioncircle.raft.entity.SnapshotMetadata;
 import com.moilioncircle.raft.util.type.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,13 +25,13 @@ import static com.moilioncircle.raft.util.Arrays.slice;
 public interface Storage {
 
     /**
-     * ErrCompacted is returned by Storage.Entries/Compact when a requested
+     * ErrCompacted is returned by Storage.entries/compact when a requested
      * index is unavailable because it predates the last snapshot.
      */
     String ErrCompacted = "requested index is unavailable due to compaction";
 
     /**
-     * ErrSnapOutOfDate is returned by Storage.CreateSnapshot when a requested
+     * ErrSnapOutOfDate is returned by Storage.createSnapshot when a requested
      * index is older than the existing snapshot.
      */
     String ErrSnapOutOfDate = "requested index is older than the existing snapshot";
@@ -48,30 +51,30 @@ public interface Storage {
     /**
      * InitialState returns the saved HardState and ConfState information.
      */
-    Tuple2<RaftPb.HardState, RaftPb.ConfState> initialState();
+    Tuple2<HardState, ConfState> initialState();
 
     /**
      * Entries returns a slice of log entries in the range [lo,hi).
      * MaxSize limits the total size of the log entries returned, but
      * Entries returns at least one entry if any.
      */
-    List<RaftPb.Entry> entries(long lo, long hi, long maxSize);
+    List<Entry> entries(long lo, long hi, long maxSize);
 
     /**
      * Term returns the term of entry i, which must be in the range
-     * [FirstIndex()-1, LastIndex()]. The term of the entry before
+     * [firstIndex()-1, lastIndex()]. The term of the entry before
      * FirstIndex is retained for matching purposes even though the
      * rest of that entry may not be available.
      */
     long term(long i);
 
     /**
-     * LastIndex returns the index of the last entry in the log.
+     * lastIndex returns the index of the last entry in the log.
      */
     long lastIndex();
 
     /**
-     * FirstIndex returns the index of the first log entry that is
+     * firstIndex returns the index of the first log entry that is
      * possibly available via Entries (older entries have been incorporated
      * into the latest Snapshot; if storage only contains the dummy entry the
      * first log entry is not available).
@@ -84,9 +87,9 @@ public interface Storage {
      * so raft state machine could know that Storage needs some time to prepare
      * snapshot and call Snapshot later.
      */
-    RaftPb.Snapshot snapshot();
+    Snapshot snapshot();
 
-    static List<RaftPb.Entry> limitSize(List<RaftPb.Entry> ents, long maxSize) {
+    static List<Entry> limitSize(List<Entry> ents, long maxSize) {
         if (ents.size() == 0) {
             return ents;
         }
@@ -106,30 +109,36 @@ public interface Storage {
     class MemoryStorage implements Storage {
         private static final Logger logger = LoggerFactory.getLogger(MemoryStorage.class);
 
-        private RaftPb.HardState hardState;
-        private RaftPb.Snapshot snapshot;
+        protected HardState hardState;
+        protected Snapshot snapshot;
         // ents[i] has raft log position i+snapshot.Metadata.Index
-        private List<RaftPb.Entry> ents;
+        protected List<Entry> ents;
 
         public MemoryStorage() {
-            ents = new ArrayList<>();
-        }
-
-        public MemoryStorage(List<RaftPb.Entry> ents) {
+            List<Entry> ents = new ArrayList<>();
+            ents.add(new Entry());
             this.ents = ents;
+            this.hardState = new HardState();
+            this.snapshot = new Snapshot();
         }
 
-        public synchronized void setHardState(RaftPb.HardState hardState) {
+        public MemoryStorage(List<Entry> ents) {
+            this.ents = ents;
+            this.hardState = new HardState();
+            this.snapshot = new Snapshot();
+        }
+
+        public synchronized void setHardState(HardState hardState) {
             this.hardState = hardState;
         }
 
         @Override
-        public Tuple2<RaftPb.HardState, RaftPb.ConfState> initialState() {
+        public Tuple2<HardState, ConfState> initialState() {
             return new Tuple2<>(hardState, snapshot.getMetadata().getConfState());
         }
 
         @Override
-        public synchronized List<RaftPb.Entry> entries(long lo, long hi, long maxSize) {
+        public synchronized List<Entry> entries(long lo, long hi, long maxSize) {
             long offset = ents.get(0).getIndex();
             if (lo <= offset) {
                 throw new RuntimeException(ErrCompacted);
@@ -169,15 +178,15 @@ public interface Storage {
         }
 
         @Override
-        public synchronized RaftPb.Snapshot snapshot() {
+        public synchronized Snapshot snapshot() {
             return snapshot;
         }
 
         /**
-         * ApplySnapshot overwrites the contents of this Storage object with
+         * applySnapshot overwrites the contents of this Storage object with
          * those of the given snapshot.
          */
-        public synchronized void applySnapshot(RaftPb.Snapshot snap) {
+        public synchronized void applySnapshot(Snapshot snap) {
             //handle check for old snapshot being applied
             long msIndex = snapshot.getMetadata().getIndex();
             long snapIndex = snap.getMetadata().getIndex();
@@ -187,16 +196,16 @@ public interface Storage {
 
             this.snapshot = snap;
             this.ents = new ArrayList<>();
-            this.ents.add(RaftPb.Entry.newBuilder().setTerm(snap.getMetadata().getTerm()).setIndex(snap.getMetadata().getIndex()).build());
+            this.ents.add(new Entry(snap.getMetadata().getTerm(), snap.getMetadata().getIndex(), null, null));
         }
 
         /**
-         * CreateSnapshot makes a snapshot which can be retrieved with Snapshot() and
+         * createSnapshot makes a snapshot which can be retrieved with Snapshot() and
          * can be used to reconstruct the state at that point.
          * If any configuration changes have been made since the last compaction,
          * the result of the last ApplyConfChange must be passed in.
          */
-        public synchronized RaftPb.Snapshot createSnapshot(long i, RaftPb.ConfState cs, byte[] data) {
+        public synchronized Snapshot createSnapshot(long i, ConfState cs, byte[] data) {
             if (i <= snapshot.getMetadata().getIndex()) {
                 throw new RuntimeException(ErrSnapOutOfDate);
             }
@@ -206,17 +215,18 @@ public interface Storage {
                 logger.warn("snapshot {} is out of bound lastindex({})", i, lastIndex());
             }
 
-            RaftPb.SnapshotMetadata.Builder builder = snapshot.getMetadata().toBuilder();
-            builder.setIndex(i).setTerm(ents.get((int) (i - offset)).getTerm());
+            SnapshotMetadata meta = new SnapshotMetadata();
+            meta.setIndex(i);
+            meta.setTerm(ents.get((int) (i - offset)).getTerm());
             if (cs != null) {
-                builder.setConfState(cs);
+                meta.setConfState(cs);
             }
-            snapshot.toBuilder().setData(ByteString.copyFrom(data));
+            snapshot = new Snapshot(data, meta);
             return snapshot;
         }
 
         /**
-         * Compact discards all log entries prior to compactIndex.
+         * compact discards all log entries prior to compactIndex.
          * It is the application's responsibility to not attempt to compact an index
          * greater than raftLog.applied.
          */
@@ -230,18 +240,18 @@ public interface Storage {
             }
 
             int i = (int) (compactIndex - offset);
-            List<RaftPb.Entry> ents = new ArrayList<>();
-            ents.add(RaftPb.Entry.newBuilder().setIndex(this.ents.get(i).getIndex()).setTerm(this.ents.get(i).getTerm()).build());
+            List<Entry> ents = new ArrayList<>();
+            ents.add(new Entry(this.ents.get(i).getIndex(), this.ents.get(i).getTerm(), null, null));
             ents.addAll(slice(this.ents, i + 1, this.ents.size()));
             this.ents = ents;
         }
 
         /**
-         * Append the new entries to storage.
+         * append the new entries to storage.
          * TODO (xiangli): ensure the entries are continuous and
          * entries[0].Index > ms.entries[0].Index
          */
-        public synchronized void append(List<RaftPb.Entry> entries) {
+        public synchronized void append(List<Entry> entries) {
             if (entries.size() == 0) {
                 return;
             }

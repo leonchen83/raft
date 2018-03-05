@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package raftpb;
 
-option java_package = "com.moilioncircle.raft.pb";
-option java_outer_classname = "RaftPb";
+option java_package = "com.moilioncircle.raft.entity.proto";
+option java_outer_classname = "RaftProto";
 
 enum EntryType {
     EntryNormal = 0;
@@ -11,10 +11,10 @@ enum EntryType {
 }
 
 message Entry {
-    uint64 Term = 2;
-    uint64 Index = 3;
-    EntryType Type = 1;
-    bytes Data = 4;
+    uint64 term = 2;
+    uint64 index = 3;
+    EntryType type = 1;
+    bytes data = 4;
 }
 
 message SnapshotMetadata {
@@ -84,8 +84,8 @@ enum ConfChangeType {
 }
 
 message ConfChange {
-    uint64 ID = 1;
-    ConfChangeType Type = 2;
-    uint64 NodeID = 3;
-    bytes Context = 4;
+    uint64 id = 1;
+    ConfChangeType type = 2;
+    uint64 nodeID = 3;
+    bytes context = 4;
 }
