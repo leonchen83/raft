@@ -1,7 +1,9 @@
 package com.moilioncircle.raft;
 
 import com.google.protobuf.ByteString;
+import com.moilioncircle.raft.entity.ConfState;
 import com.moilioncircle.raft.entity.Entry;
+import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.entity.proto.RaftProto;
 import org.junit.Test;
 
@@ -12,7 +14,6 @@ import java.util.List;
 import static com.moilioncircle.raft.Storage.ErrCompacted;
 import static com.moilioncircle.raft.Storage.ErrSnapOutOfDate;
 import static com.moilioncircle.raft.Storage.ErrUnavailable;
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -24,10 +25,11 @@ public class StorageTest {
 
     @Test
     public void testStorageTerm() {
-        List<RaftProto.Entry> ents = new ArrayList<>();
-        ents.add(RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build());
+        List<Entry> ents = new ArrayList<>();
+        ents.add(new Entry(3L, 3L, null, null));
+        ents.add(new Entry(4L, 4L, null, null));
+        ents.add(new Entry(5L, 5L, null, null));
+
         class Test {
             public Test(long i, String werr, long wterm, boolean wpanic) {
                 this.i = i; this.werr = werr; this.wterm = wterm; this.wpanic = wpanic;
@@ -47,7 +49,7 @@ public class StorageTest {
         };
         for (Test tt : tests) {
             try {
-                Storage s = new Storage.MemoryStorage(Entry.valueOf(ents));
+                Storage s = new Storage.MemoryStorage(ents);
                 long term = s.term(tt.i);
                 if (term != tt.wterm) {
                     fail();
@@ -63,46 +65,46 @@ public class StorageTest {
 
     @Test
     public void testStorageEntries() {
-        List<RaftProto.Entry> ents = new ArrayList<>();
-        ents.add(RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(6L).setTerm(6L).build());
+        List<Entry> ents = new ArrayList<>();
+        ents.add(new Entry(3L, 3L, null, null));
+        ents.add(new Entry(4L, 4L, null, null));
+        ents.add(new Entry(5L, 5L, null, null));
+        ents.add(new Entry(6L, 6L, null, null));
         class Test {
-            public Test(long lo, long hi, long maxsize, String werr, List<RaftProto.Entry> wentries) {
+            public Test(long lo, long hi, long maxsize, String werr, List<Entry> wentries) {
                 this.lo = lo; this.hi = hi; this.maxsize = maxsize; this.werr = werr; this.wentries = wentries;
             }
 
             public long lo, hi, maxsize;
             public String werr;
-            public List<RaftProto.Entry> wentries;
+            public List<Entry> wentries;
         }
         Test[] tests = new Test[]{
                 new Test(2, 6, Long.MAX_VALUE, ErrCompacted, null),
                 new Test(3, 4, Long.MAX_VALUE, ErrCompacted, null),
-                new Test(4, 5, Long.MAX_VALUE, ErrCompacted, Arrays.asList(RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build())),
+                new Test(4, 5, Long.MAX_VALUE, ErrCompacted, Arrays.asList(new Entry(4L, 4L, null, null))),
                 new Test(4, 6, Long.MAX_VALUE, ErrCompacted, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build())),
+                        new Entry(4L, 4L, null, null),
+                        new Entry(5L, 5L, null, null))),
                 new Test(4, 7, Long.MAX_VALUE, ErrCompacted, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(6L).setTerm(6L).build())),
+                        new Entry(4L, 4L, null, null),
+                        new Entry(5L, 5L, null, null),
+                        new Entry(6L, 6L, null, null))),
                 new Test(4, 7, 0, ErrCompacted, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build())),
+                        new Entry(4L, 4L, null, null))),
                 new Test(4, 7, 2, ErrCompacted, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build())),
+                        new Entry(4L, 4L, null, null),
+                        new Entry(5L, 5L, null, null))),
                 new Test(4, 7, 3, ErrCompacted, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(6L).setTerm(6L).build())),
+                        new Entry(4L, 4L, null, null),
+                        new Entry(5L, 5L, null, null),
+                        new Entry(6L, 6L, null, null)))
         };
 
         for (Test tt : tests) {
             Storage s = new Storage.MemoryStorage(ents);
             try {
-                List<RaftProto.Entry> entries = s.entries(tt.lo, tt.hi, tt.maxsize);
+                List<Entry> entries = s.entries(tt.lo, tt.hi, tt.maxsize);
                 assertEquals(entries.size(), tt.wentries.size());
                 for (int i = 0; i < entries.size(); i++) {
                     assertEquals(entries.get(i).getTerm(), tt.wentries.get(i).getTerm());
@@ -118,25 +120,25 @@ public class StorageTest {
 
     @Test
     public void testStorageLastIndex() {
-        List<RaftProto.Entry> ents = new ArrayList<>();
-        ents.add(RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build());
+        List<Entry> ents = new ArrayList<>();
+        ents.add(new Entry(3L, 3L, null, null));
+        ents.add(new Entry(4L, 4L, null, null));
+        ents.add(new Entry(5L, 5L, null, null));
         Storage.MemoryStorage s = new Storage.MemoryStorage(ents);
 
         long last = s.lastIndex();
         assertEquals(5L, last);
-        s.append(Arrays.asList(RaftProto.Entry.newBuilder().setIndex(6L).setTerm(5L).build()));
+        s.append(Arrays.asList(new Entry(5L, 6L, null, null)));
         last = s.lastIndex();
         assertEquals(6L, last);
     }
 
     @Test
     public void testStorageFirstIndex() {
-        List<RaftProto.Entry> ents = new ArrayList<>();
-        ents.add(RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build());
+        List<Entry> ents = new ArrayList<>();
+        ents.add(new Entry(3L, 3L, null, null));
+        ents.add(new Entry(4L, 4L, null, null));
+        ents.add(new Entry(5L, 5L, null, null));
         Storage.MemoryStorage s = new Storage.MemoryStorage(ents);
         long first = s.firstIndex();
         assertEquals(4L, first);
@@ -147,10 +149,10 @@ public class StorageTest {
 
     @Test
     public void testStorageCompact() {
-        List<RaftProto.Entry> ents = new ArrayList<>();
-        ents.add(RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build());
+        List<Entry> ents = new ArrayList<>();
+        ents.add(new Entry(3L, 3L, null, null));
+        ents.add(new Entry(4L, 4L, null, null));
+        ents.add(new Entry(5L, 5L, null, null));
         class Test {
             public Test(long i, String werr, long windex, long wterm, int wlen) {
                 this.i = i; this.werr = werr; this.wterm = wterm; this.windex = windex; this.wlen = wlen;
@@ -185,20 +187,20 @@ public class StorageTest {
 
     @Test
     public void testStorageCreateSnapshot() {
-        List<RaftProto.Entry> ents = new ArrayList<>();
-        ents.add(RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build());
-        RaftProto.ConfState cs = RaftProto.ConfState.newBuilder().addNodes(1).addNodes(2).addNodes(3).build();
+        List<Entry> ents = new ArrayList<>();
+        ents.add(new Entry(3L, 3L, null, null));
+        ents.add(new Entry(4L, 4L, null, null));
+        ents.add(new Entry(5L, 5L, null, null));
+        ConfState cs = new ConfState(Arrays.asList(1L, 2L, 3L), null);
         byte[] data = "data".getBytes();
         class Test {
-            public Test(long i, String werr, RaftProto.Snapshot wsnap) {
+            public Test(long i, String werr, Snapshot wsnap) {
                 this.i = i; this.werr = werr; this.wsnap = wsnap;
             }
 
             public long i;
             public String werr;
-            public RaftProto.Snapshot wsnap;
+            public Snapshot wsnap;
         }
         Test[] tests = new Test[]{
                 new Test(4, null, RaftProto.Snapshot.newBuilder().setData(ByteString.copyFrom(data)).setMetadata(RaftProto.SnapshotMetadata.newBuilder().setIndex(4L).setTerm(4L).setConfState(cs).build()).build()),
