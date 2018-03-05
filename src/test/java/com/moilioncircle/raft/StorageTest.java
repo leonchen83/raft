@@ -1,19 +1,18 @@
 package com.moilioncircle.raft;
 
-import com.google.protobuf.ByteString;
 import com.moilioncircle.raft.entity.ConfState;
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
-import com.moilioncircle.raft.entity.proto.RaftProto;
-import org.junit.Test;
-
+import com.moilioncircle.raft.entity.SnapshotMetadata;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import org.junit.Test;
 
 import static com.moilioncircle.raft.Storage.ErrCompacted;
 import static com.moilioncircle.raft.Storage.ErrSnapOutOfDate;
 import static com.moilioncircle.raft.Storage.ErrUnavailable;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -32,7 +31,10 @@ public class StorageTest {
 
         class Test {
             public Test(long i, String werr, long wterm, boolean wpanic) {
-                this.i = i; this.werr = werr; this.wterm = wterm; this.wpanic = wpanic;
+                this.i = i;
+                this.werr = werr;
+                this.wterm = wterm;
+                this.wpanic = wpanic;
             }
 
             public long i;
@@ -40,12 +42,12 @@ public class StorageTest {
             public long wterm;
             public boolean wpanic;
         }
-        Test[] tests = new Test[]{
-                new Test(2, ErrCompacted, 0, false),
-                new Test(3, null, 3, false),
-                new Test(4, null, 4, false),
-                new Test(5, null, 5, false),
-                new Test(6, ErrUnavailable, 0, false)
+        Test[] tests = new Test[] {
+            new Test(2, ErrCompacted, 0, false),
+            new Test(3, null, 3, false),
+            new Test(4, null, 4, false),
+            new Test(5, null, 5, false),
+            new Test(6, ErrUnavailable, 0, false)
         };
         for (Test tt : tests) {
             try {
@@ -72,33 +74,37 @@ public class StorageTest {
         ents.add(new Entry(6L, 6L, null, null));
         class Test {
             public Test(long lo, long hi, long maxsize, String werr, List<Entry> wentries) {
-                this.lo = lo; this.hi = hi; this.maxsize = maxsize; this.werr = werr; this.wentries = wentries;
+                this.lo = lo;
+                this.hi = hi;
+                this.maxsize = maxsize;
+                this.werr = werr;
+                this.wentries = wentries;
             }
 
             public long lo, hi, maxsize;
             public String werr;
             public List<Entry> wentries;
         }
-        Test[] tests = new Test[]{
-                new Test(2, 6, Long.MAX_VALUE, ErrCompacted, null),
-                new Test(3, 4, Long.MAX_VALUE, ErrCompacted, null),
-                new Test(4, 5, Long.MAX_VALUE, ErrCompacted, Arrays.asList(new Entry(4L, 4L, null, null))),
-                new Test(4, 6, Long.MAX_VALUE, ErrCompacted, Arrays.asList(
-                        new Entry(4L, 4L, null, null),
-                        new Entry(5L, 5L, null, null))),
-                new Test(4, 7, Long.MAX_VALUE, ErrCompacted, Arrays.asList(
-                        new Entry(4L, 4L, null, null),
-                        new Entry(5L, 5L, null, null),
-                        new Entry(6L, 6L, null, null))),
-                new Test(4, 7, 0, ErrCompacted, Arrays.asList(
-                        new Entry(4L, 4L, null, null))),
-                new Test(4, 7, 2, ErrCompacted, Arrays.asList(
-                        new Entry(4L, 4L, null, null),
-                        new Entry(5L, 5L, null, null))),
-                new Test(4, 7, 3, ErrCompacted, Arrays.asList(
-                        new Entry(4L, 4L, null, null),
-                        new Entry(5L, 5L, null, null),
-                        new Entry(6L, 6L, null, null)))
+        Test[] tests = new Test[] {
+            new Test(2, 6, Long.MAX_VALUE, ErrCompacted, null),
+            new Test(3, 4, Long.MAX_VALUE, ErrCompacted, null),
+            new Test(4, 5, Long.MAX_VALUE, ErrCompacted, Arrays.asList(new Entry(4L, 4L, null, null))),
+            new Test(4, 6, Long.MAX_VALUE, ErrCompacted, Arrays.asList(
+                new Entry(4L, 4L, null, null),
+                new Entry(5L, 5L, null, null))),
+            new Test(4, 7, Long.MAX_VALUE, ErrCompacted, Arrays.asList(
+                new Entry(4L, 4L, null, null),
+                new Entry(5L, 5L, null, null),
+                new Entry(6L, 6L, null, null))),
+            new Test(4, 7, 0, ErrCompacted, Arrays.asList(
+                new Entry(4L, 4L, null, null))),
+            new Test(4, 7, 2, ErrCompacted, Arrays.asList(
+                new Entry(4L, 4L, null, null),
+                new Entry(5L, 5L, null, null))),
+            new Test(4, 7, 3, ErrCompacted, Arrays.asList(
+                new Entry(4L, 4L, null, null),
+                new Entry(5L, 5L, null, null),
+                new Entry(6L, 6L, null, null)))
         };
 
         for (Test tt : tests) {
@@ -155,7 +161,11 @@ public class StorageTest {
         ents.add(new Entry(5L, 5L, null, null));
         class Test {
             public Test(long i, String werr, long windex, long wterm, int wlen) {
-                this.i = i; this.werr = werr; this.wterm = wterm; this.windex = windex; this.wlen = wlen;
+                this.i = i;
+                this.werr = werr;
+                this.wterm = wterm;
+                this.windex = windex;
+                this.wlen = wlen;
             }
 
             public long i;
@@ -164,11 +174,11 @@ public class StorageTest {
             public long wterm;
             public int wlen;
         }
-        Test[] tests = new Test[]{
-                new Test(2, ErrCompacted, 3, 3, 3),
-                new Test(3, ErrCompacted, 3, 3, 3),
-                new Test(4, null, 4, 4, 2),
-                new Test(5, null, 5, 5, 1)
+        Test[] tests = new Test[] {
+            new Test(2, ErrCompacted, 3, 3, 3),
+            new Test(3, ErrCompacted, 3, 3, 3),
+            new Test(4, null, 4, 4, 2),
+            new Test(5, null, 5, 5, 1)
         };
         for (Test tt : tests) {
             Storage.MemoryStorage s = new Storage.MemoryStorage(ents);
@@ -195,26 +205,27 @@ public class StorageTest {
         byte[] data = "data".getBytes();
         class Test {
             public Test(long i, String werr, Snapshot wsnap) {
-                this.i = i; this.werr = werr; this.wsnap = wsnap;
+                this.i = i;
+                this.werr = werr;
+                this.wsnap = wsnap;
             }
 
             public long i;
             public String werr;
             public Snapshot wsnap;
         }
-        Test[] tests = new Test[]{
-                new Test(4, null, RaftProto.Snapshot.newBuilder().setData(ByteString.copyFrom(data)).setMetadata(RaftProto.SnapshotMetadata.newBuilder().setIndex(4L).setTerm(4L).setConfState(cs).build()).build()),
-                new Test(5, null, RaftProto.Snapshot.newBuilder().setData(ByteString.copyFrom(data)).setMetadata(RaftProto.SnapshotMetadata.newBuilder().setIndex(5L).setTerm(5L).setConfState(cs).build()).build()),
-
+        Test[] tests = new Test[] {
+            new Test(4, null, new Snapshot(data, new SnapshotMetadata(cs, 4L, 4L))),
+            new Test(5, null, new Snapshot(data, new SnapshotMetadata(cs, 5L, 5L)))
         };
         for (Test tt : tests) {
             Storage.MemoryStorage s = new Storage.MemoryStorage(ents);
             try {
-                RaftProto.Snapshot snap = s.createSnapshot(tt.i, cs, data);
-                assertArrayEquals(snap.getData().toByteArray(), tt.wsnap.getData().toByteArray());
+                Snapshot snap = s.createSnapshot(tt.i, cs, data);
+                assertArrayEquals(snap.getData(), tt.wsnap.getData());
                 assertEquals(snap.getMetadata().getIndex(), tt.wsnap.getMetadata().getIndex());
                 assertEquals(snap.getMetadata().getTerm(), tt.wsnap.getMetadata().getTerm());
-                assertEquals(snap.getMetadata().getConfState().getNodesCount(), tt.wsnap.getMetadata().getConfState().getNodesCount());
+                assertEquals(snap.getMetadata().getConfState().getNodes().size(), tt.wsnap.getMetadata().getConfState().getNodes().size());
             } catch (RuntimeException e) {
                 e.printStackTrace();
                 if (!e.getMessage().equals(tt.werr)) {
@@ -226,71 +237,73 @@ public class StorageTest {
 
     @Test
     public void testStorageAppend() {
-        List<RaftProto.Entry> ents = new ArrayList<>();
-        ents.add(RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build());
-        ents.add(RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build());
+        List<Entry> ents = new ArrayList<>();
+        ents.add(new Entry(3L, 3L, null, null));
+        ents.add(new Entry(4L, 4L, null, null));
+        ents.add(new Entry(5L, 5L, null, null));
         class Test {
-            public Test(List<RaftProto.Entry> entries, String werr, List<RaftProto.Entry> wentries) {
-                this.entries = entries; this.werr = werr; this.wentries = wentries;
+            public Test(List<Entry> entries, String werr, List<Entry> wentries) {
+                this.entries = entries;
+                this.werr = werr;
+                this.wentries = wentries;
             }
 
-            public List<RaftProto.Entry> entries;
+            public List<Entry> entries;
             public String werr;
-            public List<RaftProto.Entry> wentries;
+            public List<Entry> wentries;
         }
-        Test[] tests = new Test[]{
-                new Test(Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build()
-                ), null, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build()
-                )),
-                new Test(Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(6L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(6L).build()
-                ), null, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(6L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(6L).build()
-                )),
-                new Test(Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(6L).setTerm(5L).build()
-                ), null, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(6L).setTerm(5L).build()
-                )),
-                new Test(Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(2L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(5L).build()
-                ), null, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(5L).build()
-                )),
-                new Test(Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(5L).build()
-                ), null, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(5L).build()
-                )),
-                new Test(Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(6L).setTerm(5L).build()
-                ), null, Arrays.asList(
-                        RaftProto.Entry.newBuilder().setIndex(3L).setTerm(3L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(4L).setTerm(4L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(5L).setTerm(5L).build(),
-                        RaftProto.Entry.newBuilder().setIndex(6L).setTerm(5L).build()
-                ))
+        Test[] tests = new Test[] {
+            new Test(Arrays.asList(
+                new Entry(3L, 3L, null, null),
+                new Entry(4L, 4L, null, null),
+                new Entry(5L, 5L, null, null)
+            ), null, Arrays.asList(
+                new Entry(3L, 3L, null, null),
+                new Entry(4L, 4L, null, null),
+                new Entry(5L, 5L, null, null)
+            )),
+            new Test(Arrays.asList(
+                new Entry(3L, 3L, null, null),
+                new Entry(6L, 4L, null, null),
+                new Entry(6L, 5L, null, null)
+            ), null, Arrays.asList(
+                new Entry(3L, 3L, null, null),
+                new Entry(6L, 4L, null, null),
+                new Entry(6L, 5L, null, null)
+            )),
+            new Test(Arrays.asList(
+                new Entry(3L, 3L, null, null),
+                new Entry(4L, 4L, null, null),
+                new Entry(5L, 5L, null, null),
+                new Entry(6L, 6L, null, null)
+            ), null, Arrays.asList(
+                new Entry(3L, 3L, null, null),
+                new Entry(4L, 4L, null, null),
+                new Entry(5L, 5L, null, null),
+                new Entry(6L, 6L, null, null)
+            )),
+            new Test(Arrays.asList(
+                new Entry(3L, 2L, null, null),
+                new Entry(3L, 3L, null, null),
+                new Entry(5L, 4L, null, null)
+            ), null, Arrays.asList(
+                new Entry(3L, 3L, null, null),
+                new Entry(5L, 4L, null, null)
+            )),
+            new Test(Arrays.asList(
+                new Entry(5L, 4L, null, null)
+            ), null, Arrays.asList(
+                new Entry(3L, 3L, null, null),
+                new Entry(5L, 4L, null, null)
+            )),
+            new Test(Arrays.asList(
+                new Entry(5L, 6L, null, null)
+            ), null, Arrays.asList(
+                new Entry(3L, 3L, null, null),
+                new Entry(4L, 4L, null, null),
+                new Entry(5L, 5L, null, null),
+                new Entry(5L, 6L, null, null)
+            ))
         };
 
         for (Test tt : tests) {
@@ -313,15 +326,15 @@ public class StorageTest {
 
     @Test
     public void testStorageApplySnapshot() {
-        RaftProto.ConfState cs = RaftProto.ConfState.newBuilder().addNodes(1).addNodes(2).addNodes(3).build();
+        ConfState cs = new ConfState(Arrays.asList(1L, 2L, 3L), null);
         byte[] data = "data".getBytes();
-        RaftProto.Snapshot[] tests = new RaftProto.Snapshot[]{
-                RaftProto.Snapshot.newBuilder().setData(ByteString.copyFrom(data)).setMetadata(RaftProto.SnapshotMetadata.newBuilder().setIndex(4L).setTerm(4L).setConfState(cs).build()).build(),
-                RaftProto.Snapshot.newBuilder().setData(ByteString.copyFrom(data)).setMetadata(RaftProto.SnapshotMetadata.newBuilder().setIndex(3L).setTerm(3L).setConfState(cs).build()).build()
+        Snapshot[] tests = new Snapshot[] {
+            new Snapshot(data, new SnapshotMetadata(cs, 4L, 4L)),
+            new Snapshot(data, new SnapshotMetadata(cs, 3L, 3L)),
         };
         Storage.MemoryStorage s = new Storage.MemoryStorage();
         int i = 0;
-        RaftProto.Snapshot tt = tests[i];
+        Snapshot tt = tests[i];
         try {
             s.applySnapshot(tt);
         } catch (RuntimeException e) {

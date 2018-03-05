@@ -84,7 +84,7 @@ public class ConfChange {
 
     public static RaftProto.ConfChange build(ConfChange change) {
         RaftProto.ConfChange.Builder builder = RaftProto.ConfChange.newBuilder();
-        builder.setID(change.getId());
+        builder.setId(change.getId());
         builder.setType(ConfChangeType.build(change.getType()));
         builder.setNodeID(change.getNodeID());
         builder.setContext(ByteString.copyFrom(change.getContext()));
@@ -92,6 +92,6 @@ public class ConfChange {
     }
 
     public static ConfChange valueOf(RaftProto.ConfChange change) {
-        return new ConfChange(change.getID(), ConfChangeType.valueOf(change.getType()), change.getNodeID(), change.getContext().toByteArray());
+        return new ConfChange(change.getId(), ConfChangeType.valueOf(change.getType()), change.getNodeID(), change.getContext().toByteArray());
     }
 }
