@@ -20,7 +20,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
- * @author Leon Chen
+ * @author Baoyi Chen
  * @since 1.0.0
  */
 public class Iterators {

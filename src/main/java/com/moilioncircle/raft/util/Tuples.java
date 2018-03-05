@@ -22,7 +22,7 @@ import com.moilioncircle.raft.util.type.Tuple4;
 import com.moilioncircle.raft.util.type.Tuple5;
 
 /**
- * @author Leon Chen
+ * @author Baoyi Chen
  * @since 1.0.0
  */
 public class Tuples {

@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * @author Leon Chen
+ * @author Baoyi Chen
  * @since 1.0.0
  */
 @SuppressWarnings("unchecked")
