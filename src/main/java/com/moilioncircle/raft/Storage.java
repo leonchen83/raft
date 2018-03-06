@@ -5,6 +5,7 @@ import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.HardState;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.entity.SnapshotMetadata;
+import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +13,9 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.moilioncircle.raft.Errors.ERR_COMPACTED;
+import static com.moilioncircle.raft.Errors.ERR_SNAP_OUT_OF_DATE;
+import static com.moilioncircle.raft.Errors.ERR_UNAVAILABLE;
 import static com.moilioncircle.raft.util.Arrays.slice;
 
 /**
@@ -23,30 +27,6 @@ import static com.moilioncircle.raft.util.Arrays.slice;
  * application is responsible for cleanup and recovery in this case.
  */
 public interface Storage {
-
-    /**
-     * ErrCompacted is returned by Storage.entries/compact when a requested
-     * index is unavailable because it predates the last snapshot.
-     */
-    String ErrCompacted = "requested index is unavailable due to compaction";
-
-    /**
-     * ErrSnapOutOfDate is returned by Storage.createSnapshot when a requested
-     * index is older than the existing snapshot.
-     */
-    String ErrSnapOutOfDate = "requested index is older than the existing snapshot";
-
-    /**
-     * ErrUnavailable is returned by Storage interface when the requested log entries
-     * are unavailable.
-     */
-    String ErrUnavailable = "requested entry at index is unavailable";
-
-    /**
-     * ErrSnapshotTemporarilyUnavailable is returned by the Storage interface when the required
-     * snapshot is temporarily unavailable.
-     */
-    String ErrSnapshotTemporarilyUnavailable = "snapshot is temporarily unavailable";
 
     /**
      * InitialState returns the saved HardState and ConfState information.
@@ -134,21 +114,21 @@ public interface Storage {
 
         @Override
         public Tuple2<HardState, ConfState> initialState() {
-            return new Tuple2<>(hardState, snapshot.getMetadata().getConfState());
+            return Tuples.of(hardState, snapshot.getMetadata().getConfState());
         }
 
         @Override
         public synchronized List<Entry> entries(long lo, long hi, long maxSize) {
             long offset = ents.get(0).getIndex();
             if (lo <= offset) {
-                throw new RuntimeException(ErrCompacted);
+                throw ERR_COMPACTED;
             }
             if (hi > lastIndex() + 1) {
                 logger.warn("entries' hi{} is out of bound lastindex{}", hi, lastIndex());
             }
             // only contains dummy entries.
             if (ents.size() == 1) {
-                throw new RuntimeException(ErrUnavailable);
+                throw ERR_UNAVAILABLE;
             }
 
             ents = slice(ents, (int) (lo - offset), (int) (hi - offset));
@@ -159,10 +139,10 @@ public interface Storage {
         public synchronized long term(long i) {
             long offset = ents.get(0).getIndex();
             if (i < offset) {
-                throw new RuntimeException(ErrCompacted);
+                throw ERR_COMPACTED;
             }
             if ((int) (i - offset) >= ents.size()) {
-                throw new RuntimeException(ErrUnavailable);
+                throw ERR_UNAVAILABLE;
             }
             return ents.get((int) (i - offset)).getTerm();
         }
@@ -191,7 +171,7 @@ public interface Storage {
             long msIndex = snapshot.getMetadata().getIndex();
             long snapIndex = snap.getMetadata().getIndex();
             if (msIndex >= snapIndex) {
-                throw new RuntimeException(ErrSnapOutOfDate);
+                throw ERR_SNAP_OUT_OF_DATE;
             }
 
             this.snapshot = snap;
@@ -207,7 +187,7 @@ public interface Storage {
          */
         public synchronized Snapshot createSnapshot(long i, ConfState cs, byte[] data) {
             if (i <= snapshot.getMetadata().getIndex()) {
-                throw new RuntimeException(ErrSnapOutOfDate);
+                throw ERR_SNAP_OUT_OF_DATE;
             }
 
             long offset = ents.get(0).getIndex();
@@ -233,7 +213,7 @@ public interface Storage {
         public synchronized void compact(long compactIndex) {
             long offset = ents.get(0).getIndex();
             if (compactIndex <= offset) {
-                throw new RuntimeException(ErrCompacted);
+                throw ERR_COMPACTED;
             }
             if (compactIndex > lastIndex()) {
                 logger.warn("compact {} is out of bound lastindex({})", compactIndex, lastIndex());

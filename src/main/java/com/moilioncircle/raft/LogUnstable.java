@@ -3,6 +3,7 @@ package com.moilioncircle.raft;
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.util.Arrays;
+import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,49 +26,55 @@ public class LogUnstable {
 
     public long offset;
 
-    // maybeFirstIndex returns the index of the first possible entry in entries
-    // if it has a snapshot.
+    /**
+     * maybeFirstIndex returns the index of the first possible entry in entries
+     * if it has a snapshot.
+     */
     public Tuple2<Long, Boolean> maybeFirstIndex() {
         if (snapshot != null) {
-            return new Tuple2<>(snapshot.getMetadata().getIndex() + 1, true);
+            return Tuples.of(snapshot.getMetadata().getIndex() + 1, true);
         }
-        return new Tuple2<>(0L, false);
+        return Tuples.of(0L, false);
     }
 
-    // maybeLastIndex returns the last index if it has at least one
-    // unstable entry or snapshot.
+    /**
+     * maybeLastIndex returns the last index if it has at least one
+     * unstable entry or snapshot.
+     */
     public Tuple2<Long, Boolean> maybeLastIndex() {
         int l = entries.size();
         if (l != 0) {
-            return new Tuple2<>(offset + l - 1, true);
+            return Tuples.of(offset + l - 1, true);
         }
         if (snapshot != null) {
-            return new Tuple2<>(snapshot.getMetadata().getIndex(), true);
+            return Tuples.of(snapshot.getMetadata().getIndex(), true);
         }
-        return new Tuple2<>(0L, false);
+        return Tuples.of(0L, false);
     }
 
-    // maybeTerm returns the term of the entry at index i, if there
-    // is any.
+    /**
+     * maybeTerm returns the term of the entry at index i, if there
+     * is any.
+     */
     public Tuple2<Long, Boolean> maybeTerm(long i) {
         if (i < offset) {
             if (snapshot == null) {
-                return new Tuple2<>(0L, false);
+                return Tuples.of(0L, false);
             }
             if (snapshot.getMetadata().getIndex() == i) {
-                return new Tuple2<>(snapshot.getMetadata().getTerm(), true);
+                return Tuples.of(snapshot.getMetadata().getTerm(), true);
             }
-            return new Tuple2<>(0L, false);
+            return Tuples.of(0L, false);
         }
 
         Tuple2<Long, Boolean> tuple = maybeLastIndex();
         if (!tuple.getV2()) {
-            return new Tuple2<>(0L, false);
+            return Tuples.of(0L, false);
         }
         if (i > tuple.getV1()) {
-            return new Tuple2<>(0L, false);
+            return Tuples.of(0L, false);
         }
-        return new Tuple2<>(entries.get((int) (i - offset)).getTerm(), true);
+        return Tuples.of(entries.get((int) (i - offset)).getTerm(), true);
     }
 
     public void stableTo(long i, long t) {
@@ -75,9 +82,11 @@ public class LogUnstable {
         if (!tuple.getV2()) {
             return;
         }
-        // if i < offset, term is matched with the snapshot
-        // only update the unstable entries if term is matched with
-        // an unstable entry.
+        /*
+         * if i < offset, term is matched with the snapshot
+         * only update the unstable entries if term is matched with
+         * an unstable entry.
+         */
         if (tuple.getV1().longValue() == t && i >= offset) {
             entries = Arrays.slice(entries, (int) (i + 1 - offset), entries.size());
             offset = i + 1;
@@ -99,18 +108,18 @@ public class LogUnstable {
     public void truncateAndAppend(List<Entry> ents) {
         long after = ents.get(0).getIndex();
         if (after == offset + entries.size()) {
-            // after is the next index in the u.entries
-            // directly append
+            // after is the next index in the u.entries directly append
             entries.addAll(ents);
         } else if (after <= offset) {
             logger.info("replace the unstable entries from index {}", after);
-            // The log is being truncated to before our current offset
-            // portion, so set the offset and replace the entries
+            /*
+             * The log is being truncated to before our current offset
+             * portion, so set the offset and replace the entries
+             */
             offset = after;
             entries = ents;
         } else {
-            // truncate to after and copy to u.entries
-            // then append
+            // truncate to after and copy to u.entries then append
             logger.info("truncate the unstable entries before index {}", after);
             entries = slice(offset, after);
             entries.addAll(ents);
@@ -122,7 +131,9 @@ public class LogUnstable {
         return Arrays.slice(entries, (int) (lo - offset), (int) (hi - offset));
     }
 
-    // u.offset <= lo <= hi <= u.offset+len(u.entries)
+    /**
+     * u.offset <= lo <= hi <= u.offset+len(u.entries)
+     */
     public void mustCheckOutOfBounds(long lo, long hi) {
         if (lo > hi) {
             logger.warn("invalid unstable.slice {} > {}", lo, hi);

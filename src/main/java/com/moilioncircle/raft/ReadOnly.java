@@ -16,11 +16,11 @@ public class ReadOnly {
 
     private static final Logger logger = LoggerFactory.getLogger(ReadOnly.class);
 
-    public int option;
+    public ReadOnlyOption option;
     public Map<String, ReadIndexStatus> pendingReadIndex;
     public List<String> readIndexQueue;
 
-    public ReadOnly(int option) {
+    public ReadOnly(ReadOnlyOption option) {
         this.option = option;
         this.pendingReadIndex = new HashMap<>();
         this.readIndexQueue = new ArrayList<>();
@@ -68,7 +68,7 @@ public class ReadOnly {
             i++;
             ReadIndexStatus ok = pendingReadIndex.get(okctx);
             if (ok == null) {
-                logger.warn("cannot find corresponding read state from pending map");
+                throw new Errors.RaftException("cannot find corresponding read state from pending map");
             }
             rss.add(ok);
             if (okctx.equals(ctx)) {
@@ -136,5 +136,9 @@ public class ReadOnly {
                     ", acks=" + acks +
                     '}';
         }
+    }
+
+    public enum ReadOnlyOption {
+        Safe, LeaseBased
     }
 }

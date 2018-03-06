@@ -5,17 +5,27 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 
+import static com.moilioncircle.raft.Progress.ProgressState.Probe;
+import static com.moilioncircle.raft.Progress.ProgressState.Replicate;
+import static com.moilioncircle.raft.Progress.ProgressState.Snapshot;
 import static java.lang.Math.min;
 
+/**
+ * Progress represents a follower’s progress in the view of the leader. Leader maintains
+ * progresses of all followers, and sends entries to the follower based on its progress.
+ */
 public class Progress {
 
     private static final Logger logger = LoggerFactory.getLogger(Progress.class);
 
-    public static final long ProgressStateProbe = 0L;
-    public static final long ProgressStateReplicate = 1L;
-    public static final long ProgressStateSnapshot = 2L;
+    public enum ProgressState {
+        Probe,
+        Replicate,
+        Snapshot
+    }
 
     public long match;
+
     public long next;
 
     /**
@@ -31,7 +41,7 @@ public class Progress {
      * When in ProgressStateSnapshot, leader should have sent out snapshot
      * before and stops sending any replication message.
      */
-    public long state;
+    public ProgressState state;
 
     /**
      * Paused is used in ProgressStateProbe.
@@ -76,7 +86,7 @@ public class Progress {
      */
     public boolean isLearner;
 
-    public void resetState(long state) {
+    public void resetState(ProgressState state) {
         this.paused = false;
         this.pendingSnapshot = 0;
         this.state = state;
@@ -84,31 +94,35 @@ public class Progress {
     }
 
     public void becomeProbe() {
-        // If the original state is ProgressStateSnapshot, progress knows that
-        // the pending snapshot has been sent to this peer successfully, then
-        // probes from pendingSnapshot + 1.
-        if (state == ProgressStateSnapshot) {
+        /*
+         * If the original state is ProgressStateSnapshot, progress knows that
+         * the pending snapshot has been sent to this peer successfully, then
+         * probes from pendingSnapshot + 1.
+         */
+        if (state == Snapshot) {
             long pendingSnapshot = this.pendingSnapshot;
-            resetState(ProgressStateProbe);
+            resetState(Probe);
             next = Math.max(match + 1, pendingSnapshot + 1);
         } else {
-            resetState(ProgressStateProbe);
+            resetState(Probe);
             next = match + 1;
         }
     }
 
     public void becomeReplicate() {
-        resetState(ProgressStateReplicate);
+        resetState(Replicate);
         next = match + 1;
     }
 
     public void becomeSnapshot(long snapshoti) {
-        resetState(ProgressStateSnapshot);
+        resetState(Snapshot);
         pendingSnapshot = snapshoti;
     }
 
-    // maybeUpdate returns false if the given n index comes from an outdated message.
-    // Otherwise it updates the progress and returns true.
+    /**
+     * maybeUpdate returns false if the given n index comes from an outdated message.
+     * Otherwise it updates the progress and returns true.
+     */
     public boolean maybeUpdate(long n) {
         boolean updated = false;
         if (match < n) {
@@ -122,14 +136,17 @@ public class Progress {
         return updated;
     }
 
-    public void optimisticUpdate(long n) { next = n + 1; }
+    public void optimisticUpdate(long n) {
+        next = n + 1;
+    }
 
-    // maybeDecrTo returns false if the given to index comes from an out of order message.
-    // Otherwise it decreases the progress next index to min(rejected, last) and returns true.
+    /**
+     * maybeDecrTo returns false if the given to index comes from an out of order message.
+     * Otherwise it decreases the progress next index to min(rejected, last) and returns true.
+     */
     public boolean maybeDecrTo(long rejected, long last) {
-        if (state == ProgressStateReplicate) {
-            // the rejection must be stale if the progress has matched and "rejected"
-            // is smaller than "match".
+        if (state == Replicate) {
+            // the rejection must be stale if the progress has matched and "rejected" is smaller than "match".
             if (rejected <= match) {
                 return false;
             }
@@ -150,32 +167,42 @@ public class Progress {
         return true;
     }
 
-    public void pause() { paused = true; }
+    public void pause() {
+        paused = true;
+    }
 
-    public void resume() { paused = false; }
+    public void resume() {
+        paused = false;
+    }
 
-    // IsPaused returns whether sending log entries to this node has been
-    // paused. A node may be paused because it has rejected recent
-    // MsgApps, is currently waiting for a snapshot, or has reached the
-    // MaxInflightMsgs limit.
+    /**
+     * IsPaused returns whether sending log entries to this node has been
+     * paused. A node may be paused because it has rejected recent
+     * MsgApps, is currently waiting for a snapshot, or has reached the
+     * MaxInflightMsgs limit.
+     */
     public boolean isPaused() {
-        if (state == ProgressStateProbe) {
+        if (state == Probe) {
             return paused;
-        } else if (state == ProgressStateReplicate) {
+        } else if (state == Replicate) {
             return ins.full();
-        } else if (state == ProgressStateSnapshot) {
+        } else if (state == Snapshot) {
             return true;
         } else {
             throw new AssertionError("unexpected state");
         }
     }
 
-    public void snapshotFailure() { pendingSnapshot = 0; }
+    public void snapshotFailure() {
+        pendingSnapshot = 0;
+    }
 
-    // needSnapshotAbort returns true if snapshot progress's Match
-    // is equal or higher than the pendingSnapshot.
+    /**
+     * needSnapshotAbort returns true if snapshot progress's Match
+     * is equal or higher than the pendingSnapshot.
+     */
     public boolean needSnapshotAbort() {
-        return state == ProgressStateSnapshot && match >= pendingSnapshot;
+        return state == Snapshot && match >= pendingSnapshot;
     }
 
     @Override
@@ -266,7 +293,8 @@ public class Progress {
             int idx = start;
             int i = 0;
             for (i = 0; i < count; i++) {
-                if (to < buffer[idx]) { // found the first large inflight
+                if (to < buffer[idx]) {
+                    // found the first large inflight
                     break;
                 }
 
@@ -281,8 +309,7 @@ public class Progress {
             count -= i;
             start = idx;
             if (count == 0) {
-                // inflights is empty, reset the start index so that we don't grow the
-                // buffer unnecessarily.
+                // inflights is empty, reset the start index so that we don't grow the buffer unnecessarily.
                 start = 0;
             }
         }

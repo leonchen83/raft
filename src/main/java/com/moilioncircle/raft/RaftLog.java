@@ -3,6 +3,7 @@ package com.moilioncircle.raft;
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.util.Arrays;
+import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,8 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import static com.moilioncircle.raft.Errors.ERR_COMPACTED;
 import static com.moilioncircle.raft.Raft.noLimit;
-import static com.moilioncircle.raft.Storage.ErrCompacted;
 import static com.moilioncircle.raft.Storage.limitSize;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
@@ -55,8 +56,10 @@ public class RaftLog {
                 '}';
     }
 
-    // newLog returns log using the given storage. It recovers the log to the state
-    // that it just commits and applies the latest snapshot.
+    /**
+     * newLog returns log using the given storage. It recovers the log to the state
+     * that it just commits and applies the latest snapshot.
+     */
     public RaftLog(Storage storage) {
         Objects.requireNonNull(storage);
         this.storage = storage;
@@ -69,8 +72,10 @@ public class RaftLog {
         applied = firstIndex - 1;
     }
 
-    // maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
-    // it returns (last index of new entries, true).
+    /**
+     * maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
+     * it returns (last index of new entries, true).
+     */
     public Tuple2<Long, Boolean> maybeAppend(long index, long logTerm, long committed, List<Entry> ents) {
         if (matchTerm(index, logTerm)) {
             long lastnewi = index + ents.size();
@@ -82,9 +87,9 @@ public class RaftLog {
                 append(Arrays.slice(ents, (int) (ci - offset), ents.size()));
             }
             commitTo(min(committed, lastnewi));
-            return new Tuple2<>(lastnewi, true);
+            return Tuples.of(lastnewi, true);
         }
-        return new Tuple2<>(0L, false);
+        return Tuples.of(0L, false);
     }
 
     public long append(List<Entry> ents) {
@@ -99,17 +104,19 @@ public class RaftLog {
         return lastIndex();
     }
 
-    // findConflict finds the index of the conflict.
-    // It returns the first pair of conflicting entries between the existing
-    // entries and the given entries, if there are any.
-    // If there is no conflicting entries, and the existing entries contains
-    // all the given entries, zero will be returned.
-    // If there is no conflicting entries, but the given entries contains new
-    // entries, the index of the first new entry will be returned.
-    // An entry is considered to be conflicting if it has the same index but
-    // a different term.
-    // The first entry MUST have an index equal to the argument 'from'.
-    // The index of the given entries MUST be continuously increasing.
+    /**
+     * findConflict finds the index of the conflict.
+     * It returns the first pair of conflicting entries between the existing
+     * entries and the given entries, if there are any.
+     * If there is no conflicting entries, and the existing entries contains
+     * all the given entries, zero will be returned.
+     * If there is no conflicting entries, but the given entries contains new
+     * entries, the index of the first new entry will be returned.
+     * An entry is considered to be conflicting if it has the same index but
+     * a different term.
+     * The first entry MUST have an index equal to the argument 'from'.
+     * The index of the given entries MUST be continuously increasing.
+     */
     public long findConflict(List<Entry> ents) {
         for (Entry ne : ents) {
             if (!matchTerm(ne.getIndex(), ne.getTerm())) {
@@ -130,9 +137,11 @@ public class RaftLog {
         return unstable.entries;
     }
 
-    // nextEnts returns all the available entries for execution.
-    // If applied is smaller than the index of snapshot, it returns all committed
-    // entries after the index of snapshot.
+    /**
+     * nextEnts returns all the available entries for execution.
+     * If applied is smaller than the index of snapshot, it returns all committed
+     * entries after the index of snapshot.
+     */
     public List<Entry> nextEnts() {
         long off = max(applied + 1, firstIndex());
         if (committed + 1 > off) {
@@ -145,8 +154,10 @@ public class RaftLog {
         return null;
     }
 
-    // hasNextEnts returns if there is any available entries for execution. This
-    // is a fast check without heavy raftLog.slice() in raftLog.nextEnts().
+    /**
+     * hasNextEnts returns if there is any available entries for execution. This
+     * is a fast check without heavy raftLog.slice() in raftLog.nextEnts().
+     */
     public boolean hasNextEnts() {
         long off = max(applied + 1, firstIndex());
         return committed + 1 > off;
@@ -241,7 +252,9 @@ public class RaftLog {
         return slice(i, lastIndex() + 1, maxsize);
     }
 
-    // allEntries returns all entries in the log.
+    /**
+     * allEntries returns all entries in the log.
+     */
     public List<Entry> allEntries() {
         List<Entry> ents = entries(firstIndex(), noLimit);
         return ents;
@@ -252,12 +265,14 @@ public class RaftLog {
 //            panic(err)
     }
 
-    // isUpToDate determines if the given (lastIndex,term) log is more up-to-date
-    // by comparing the index and term of the last entries in the existing logs.
-    // If the logs have last entries with different terms, then the log with the
-    // later term is more up-to-date. If the logs end with the same term, then
-    // whichever log has the larger lastIndex is more up-to-date. If the logs are
-    // the same, the given log is up-to-date.
+    /**
+     * isUpToDate determines if the given (lastIndex,term) log is more up-to-date
+     * by comparing the index and term of the last entries in the existing logs.
+     * If the logs have last entries with different terms, then the log with the
+     * later term is more up-to-date. If the logs end with the same term, then
+     * whichever log has the larger lastIndex is more up-to-date. If the logs are
+     * the same, the given log is up-to-date.
+     */
     public boolean isUpToDate(long lasti, long term) {
         return term > lastTerm() || (term == lastTerm() && lasti >= lastIndex());
     }
@@ -284,7 +299,9 @@ public class RaftLog {
         unstable.restore(s);
     }
 
-    // slice returns a slice of log entries from lo through hi-1, inclusive.
+    /**
+     * slice returns a slice of log entries from lo through hi-1, inclusive.
+     */
     public List<Entry> slice(long lo, long hi, long maxSize) {
         mustCheckOutOfBounds(lo, hi);
 //            if err != nil {
@@ -321,14 +338,16 @@ public class RaftLog {
         return limitSize(ents, maxSize);
     }
 
-    // l.firstIndex <= lo <= hi <= l.firstIndex + len(l.entries)
+    /**
+     * l.firstIndex <= lo <= hi <= l.firstIndex + len(l.entries)
+     */
     public void mustCheckOutOfBounds(long lo, long hi) {
         if (lo > hi) {
             logger.warn("invalid slice {} > {}", lo, hi);
         }
         long fi = firstIndex();
         if (lo < fi) {
-            throw new RuntimeException(ErrCompacted);
+            throw ERR_COMPACTED;
         }
 
         long length = lastIndex() + 1 - fi;

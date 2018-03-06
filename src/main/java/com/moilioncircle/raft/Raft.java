@@ -22,12 +22,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
-import static com.moilioncircle.raft.Progress.ProgressStateProbe;
-import static com.moilioncircle.raft.Progress.ProgressStateReplicate;
-import static com.moilioncircle.raft.Progress.ProgressStateSnapshot;
+import static com.moilioncircle.raft.Errors.ERR_PROPOSAL_DROPPED;
+import static com.moilioncircle.raft.Errors.ERR_SNAPSHOT_TEMPORARILY_UNAVAILABLE;
+import static com.moilioncircle.raft.Progress.ProgressState.Probe;
+import static com.moilioncircle.raft.Progress.ProgressState.Replicate;
+import static com.moilioncircle.raft.Raft.StateRole.Candidate;
+import static com.moilioncircle.raft.Raft.StateRole.Follower;
+import static com.moilioncircle.raft.Raft.StateRole.Leader;
+import static com.moilioncircle.raft.Raft.StateRole.PreCandidate;
 import static com.moilioncircle.raft.RawNode.Ready.isEmptySnap;
 import static com.moilioncircle.raft.RawNode.Ready.isHardStateEqual;
-import static com.moilioncircle.raft.Storage.ErrSnapshotTemporarilyUnavailable;
+import static com.moilioncircle.raft.ReadOnly.ReadOnlyOption.LeaseBased;
+import static com.moilioncircle.raft.ReadOnly.ReadOnlyOption.Safe;
 import static com.moilioncircle.raft.entity.EntryType.EntryConfChange;
 import static com.moilioncircle.raft.entity.EntryType.EntryNormal;
 import static com.moilioncircle.raft.entity.MessageType.MsgApp;
@@ -53,33 +59,29 @@ public class Raft {
 
     private static final Logger logger = LoggerFactory.getLogger(Raft.class);
 
-    public static final long StateFollower = 0;
-    public static final long StateCandidate = 1;
-    public static final long StateLeader = 2;
-    public static final long StatePreCandidate = 3;
-    public static final long NumStates = 4;
+    public enum StateRole {
+        Follower,
+        Candidate,
+        Leader,
+        PreCandidate
+    }
 
-    public static final int ReadOnlySafe = 0;
-    // ReadOnlyLeaseBased ensures linearizability of the read only request by
-    // relying on the leader lease. It can be affected by clock drift.
-    // If the clock drift is unbounded, leader might keep the lease longer than it
-    // should (clock can move backward/pause without any bound). ReadIndex is not safe
-    // in that case.
-    public static final int ReadOnlyLeaseBased = 1;
-
-    public static final int SnapshotFinish = 1;
-    public static final int SnapshotFailure = 2;
-
-    // campaignPreElection represents the first phase of a normal election when
-    // Config.PreVote is true.
+    /**
+     * campaignPreElection represents the first phase of a normal election when
+     * Config.PreVote is true.
+     */
     public static final String campaignPreElection = "CampaignPreElection";
-    // campaignElection represents a normal (time-based) election (the second phase
-    // of the election when Config.PreVote is true).
-    public static final String campaignElection = "CampaignElection";
-    // campaignTransfer represents the type of leader transfer
-    public static final String campaignTransfer = "CampaignTransfer";
 
-    public static final String ErrProposalDropped = "raft proposal dropped";
+    /**
+     * campaignElection represents a normal (time-based) election (the second phase
+     * of the election when Config.PreVote is true).
+     */
+    public static final String campaignElection = "CampaignElection";
+
+    /**
+     * campaignTransfer represents the type of leader transfer
+     */
+    public static final String campaignTransfer = "CampaignTransfer";
 
     public static final long None = 0;
     public static final long noLimit = Long.MAX_VALUE;
@@ -102,7 +104,7 @@ public class Raft {
     public Map<Long, Progress> prs;
     public Map<Long, Progress> learnerPrs;
 
-    public long state;
+    public StateRole state;
 
     /**
      * isLearner is true if the local raft node is a learner.
@@ -178,10 +180,12 @@ public class Raft {
         List<Long> learners = c.learners;
         if (cs.getNodes().size() > 0 || cs.getLearners().size() > 0) {
             if (peers.size() > 0 || learners.size() > 0) {
-                // TODO(bdarnell): the peers argument is always nil except in
-                // tests; the argument should be removed and these tests should be
-                // updated to specify their nodes through a snapshot.
-                throw new RuntimeException("cannot specify both newRaft(peers, learners) and ConfState.(Nodes, Learners)");
+                /*
+                 * TODO(bdarnell): the peers argument is always nil except in
+                 * tests; the argument should be removed and these tests should be
+                 * updated to specify their nodes through a snapshot.
+                 */
+                throw new Errors.RaftException("cannot specify both newRaft(peers, learners) and ConfState.(Nodes, Learners)");
             }
             peers = cs.getNodes();
             learners = cs.getLearners();
@@ -210,7 +214,7 @@ public class Raft {
 
         for (Long p : learners) {
             if (prs.containsKey(p)) {
-                throw new RuntimeException("node " + p + " is in both learner and peer list");
+                throw new Errors.RaftException("node " + p + " is in both learner and peer list");
             }
             Progress progress = new Progress();
             progress.next = 1;
@@ -272,33 +276,39 @@ public class Raft {
         return nodes;
     }
 
-    // send persists state to stable storage and then sends to its mailbox.
+    /**
+     * send persists state to stable storage and then sends to its mailbox.
+     */
     public void send(Message m) {
         m.setFrom(id);
         if (m.getType() == MsgVote || m.getType() == MsgVoteResp || m.getType() == MsgPreVote || m.getType() == MsgPreVoteResp) {
             if (m.getTerm() == 0) {
-                // All {pre-,}campaign messages need to have the term set when
-                // sending.
-                // - MsgVote: m.Term is the term the node is campaigning for,
-                //   non-zero as we increment the term when campaigning.
-                // - MsgVoteResp: m.Term is the new r.Term if the MsgVote was
-                //   granted, non-zero for the same reason MsgVote is
-                // - MsgPreVote: m.Term is the term the node will campaign,
-                //   non-zero as we use m.Term to indicate the next term we'll be
-                //   campaigning for
-                // - MsgPreVoteResp: m.Term is the term received in the original
-                //   MsgPreVote if the pre-vote was granted, non-zero for the
-                //   same reasons MsgPreVote is
-                throw new RuntimeException("term should be set when sending " + m.getType());
+                /*
+                 * All {pre-,}campaign messages need to have the term set when
+                 * sending.
+                 * - MsgVote: m.Term is the term the node is campaigning for,
+                 *   non-zero as we increment the term when campaigning.
+                 * - MsgVoteResp: m.Term is the new r.Term if the MsgVote was
+                 *   granted, non-zero for the same reason MsgVote is
+                 * - MsgPreVote: m.Term is the term the node will campaign,
+                 *   non-zero as we use m.Term to indicate the next term we'll be
+                 *   campaigning for
+                 * - MsgPreVoteResp: m.Term is the term received in the original
+                 *   MsgPreVote if the pre-vote was granted, non-zero for the
+                 *   same reasons MsgPreVote is
+                 */
+                throw new Errors.RaftException("term should be set when sending " + m.getType());
             }
         } else {
             if (m.getTerm() != 0) {
-                throw new RuntimeException("term should not be set when sending " + m.getType() + " (was " + m.getTerm() + ")");
+                throw new Errors.RaftException("term should not be set when sending " + m.getType() + " (was " + m.getTerm() + ")");
             }
-            // do not attach term to MsgProp, MsgReadIndex
-            // proposals are a way to forward to the leader and
-            // should be treated as local message.
-            // MsgReadIndex is also forwarded to leader.
+            /*
+             * do not attach term to MsgProp, MsgReadIndex
+             * proposals are a way to forward to the leader and
+             * should be treated as local message.
+             * MsgReadIndex is also forwarded to leader.
+             */
             if (m.getType() != MsgProp && m.getType() != MsgReadIndex) {
                 m.setTerm(term);
             }
@@ -312,7 +322,9 @@ public class Raft {
         return learnerPrs.get(id);
     }
 
-    // sendAppend sends RPC, with entries to the given peer.
+    /**
+     * sendAppend sends RPC, with entries to the given peer.
+     */
     public void sendAppend(long to) {
         Progress pr = getProgress(to);
         if (pr.isPaused()) {
@@ -331,18 +343,18 @@ public class Raft {
             m.setCommit(raftLog.committed);
             int n = m.getEntries().size();
             if (n != 0) {
-                if (pr.state == ProgressStateReplicate) {
+                if (pr.state == Replicate) {
                     long last = m.getEntries().get(n - 1).getIndex();
                     pr.optimisticUpdate(last);
                     pr.ins.add(last);
-                } else if (pr.state == ProgressStateProbe) {
+                } else if (pr.state == Probe) {
                     pr.pause();
                 } else {
                     logger.warn("{} is sending append in unhandled state {}", id, pr.state);
                 }
             }
             send(m);
-        } catch (RuntimeException e) {
+        } catch (Errors.RaftException e) {
             if (!pr.recentActive) {
                 logger.debug("ignore sending snapshot to {} since it is not recently active", to);
                 return;
@@ -352,7 +364,7 @@ public class Raft {
             try {
                 Snapshot snapshot = raftLog.snapshot();
                 if (isEmptySnap(snapshot)) {
-                    throw new RuntimeException("need non-empty snapshot");
+                    throw new Errors.RaftException("need non-empty snapshot");
                 }
                 m.setSnapshot(snapshot);
                 long sindex = snapshot.getMetadata().getIndex();
@@ -361,8 +373,8 @@ public class Raft {
                         id, raftLog.firstIndex(), raftLog.committed, sindex, sterm, to, pr);
                 pr.becomeSnapshot(sindex);
                 logger.debug("{} paused sending replication messages to {} [{}]", id, to, pr);
-            } catch (RuntimeException e1) {
-                if (e1.getMessage().equals(ErrSnapshotTemporarilyUnavailable)) {
+            } catch (Errors.RaftException e1) {
+                if (e1 == ERR_SNAPSHOT_TEMPORARILY_UNAVAILABLE) {
                     logger.debug("{} failed to send snapshot to {} because snapshot is temporarily unavailable", id, to);
                     return;
                 }
@@ -371,14 +383,18 @@ public class Raft {
         }
     }
 
-    // sendHeartbeat sends an empty MsgApp
+    /**
+     * sendHeartbeat sends an empty MsgApp
+     */
     public void sendHeartbeat(long to, byte[] ctx) {
-        // Attach the commit as min(to.matched, r.committed).
-        // When the leader sends out heartbeat message,
-        // the receiver(follower) might not be matched with the leader
-        // or it might not have all the committed entries.
-        // The leader MUST NOT forward the follower's commit to
-        // an unmatched index.
+        /*
+         * Attach the commit as min(to.matched, r.committed).
+         * When the leader sends out heartbeat message,
+         * the receiver(follower) might not be matched with the leader
+         * or it might not have all the committed entries.
+         * The leader MUST NOT forward the follower's commit to
+         * an unmatched index.
+         */
         long commit = min(getProgress(to).match, raftLog.committed);
         Message m = new Message();
         m.setTo(to);
@@ -398,8 +414,10 @@ public class Raft {
         }
     }
 
-    // bcastAppend sends RPC, with entries to all peers that are not up-to-date
-    // according to the progress recorded in r.prs.
+    /**
+     * bcastAppend sends RPC, with entries to all peers that are not up-to-date
+     * according to the progress recorded in r.prs.
+     */
     public void bcastAppend() {
         forEachProgress((id, pr) -> {
             if (this.id == id) {
@@ -410,7 +428,9 @@ public class Raft {
         });
     }
 
-    // bcastHeartbeat sends RPC, without entries to all the peers.
+    /**
+     * bcastHeartbeat sends RPC, without entries to all the peers.
+     */
     public void bcastHeartbeat() {
         String lastCtx = readOnly.lastPendingRequestCtx();
         if (lastCtx.length() == 0) {
@@ -430,9 +450,11 @@ public class Raft {
         });
     }
 
-    // maybeCommit attempts to advance the commit index. Returns true if
-    // the commit index changed (in which case the caller should call
-    // r.bcastAppend).
+    /**
+     * maybeCommit attempts to advance the commit index. Returns true if
+     * the commit index changed (in which case the caller should call
+     * r.bcastAppend).
+     */
     public boolean maybeCommit() {
         // TODO(bmizerany): optimize.. Currently naive
         List<Long> mis = new ArrayList<>(prs.size());
@@ -498,7 +520,9 @@ public class Raft {
         return null;
     };
 
-    // tickHeartbeat is run by leaders to send a MsgBeat after r.heartbeatTimeout.
+    /**
+     * tickHeartbeat is run by leaders to send a MsgBeat after r.heartbeatTimeout.
+     */
     public Supplier<Void> tickHeartbeat = () -> {
         heartbeatElapsed++;
         electionElapsed++;
@@ -512,12 +536,12 @@ public class Raft {
                 step(msg);
             }
             // If current leader cannot transfer leadership in electionTimeout, it becomes leader again.
-            if (state == StateLeader && leadTransferee != None) {
+            if (state == Leader && leadTransferee != None) {
                 abortLeaderTransfer();
             }
         }
 
-        if (state != StateLeader) {
+        if (state != Leader) {
             return null;
         }
 
@@ -536,55 +560,59 @@ public class Raft {
         reset(term);
         this.tick = tickElection;
         this.lead = lead;
-        this.state = StateFollower;
+        this.state = Follower;
         logger.info("{} became follower at term {}", id, term);
     }
 
     public void becomeCandidate() {
         // TODO(xiangli) remove the panic when the raft implementation is stable
-        if (state == StateLeader) {
-            throw new RuntimeException("invalid transition [leader -> candidate]");
+        if (state == Leader) {
+            throw new Errors.RaftException("invalid transition [leader -> candidate]");
         }
         this.step = stepCandidate;
         reset(term + 1);
         this.tick = tickElection;
         this.vote = id;
-        this.state = StateCandidate;
+        this.state = Candidate;
         logger.info("{} became candidate at term {}", id, term);
     }
 
     public void becomePreCandidate() {
         // TODO(xiangli) remove the panic when the raft implementation is stable
-        if (state == StateLeader) {
-            throw new RuntimeException("invalid transition [leader -> pre-candidate]");
+        if (state == Leader) {
+            throw new Errors.RaftException("invalid transition [leader -> pre-candidate]");
         }
-        // Becoming a pre-candidate changes our step functions and state,
-        // but doesn't change anything else. In particular it does not increase
-        // r.Term or change r.Vote.
+        /*
+         * Becoming a pre-candidate changes our step functions and state,
+         * but doesn't change anything else. In particular it does not increase
+         * r.Term or change r.Vote.
+         */
         this.step = stepCandidate;
         this.votes = new HashMap<>();
         this.tick = tickElection;
-        this.state = StatePreCandidate;
+        this.state = PreCandidate;
         logger.info("{} became pre-candidate at term {}", id, term);
     }
 
     public void becomeLeader() {
         // TODO(xiangli) remove the panic when the raft implementation is stable
-        if (state == StateFollower) {
-            throw new RuntimeException("invalid transition [follower -> leader]");
+        if (state == Follower) {
+            throw new Errors.RaftException("invalid transition [follower -> leader]");
         }
         this.step = stepLeader;
         reset(term);
         this.tick = tickHeartbeat;
         this.lead = id;
-        this.state = StateLeader;
+        this.state = Leader;
         List<Entry> ents = raftLog.entries(raftLog.committed + 1, noLimit);
 
-        // Conservatively set the pendingConfIndex to the last index in the
-        // log. There may or may not be a pending config change, but it's
-        // safe to delay any future proposals until we commit all our
-        // pending log entries, and scanning the entire tail of the log
-        // could be expensive.
+        /*
+         * Conservatively set the pendingConfIndex to the last index in the
+         * log. There may or may not be a pending config change, but it's
+         * safe to delay any future proposals until we commit all our
+         * pending log entries, and scanning the entire tail of the log
+         * could be expensive.
+         */
         if (ents.size() > 0) {
             pendingConfIndex = ents.get(ents.size() - 1).getIndex();
         }
@@ -609,8 +637,10 @@ public class Raft {
             term = this.term;
         }
         if (quorum() == poll(id, voteRespMsgType(voteMsg), true)) {
-            // We won the election after voting for ourselves (which must mean that
-            // this is a single-node cluster). Advance to the next state.
+            /*
+             * We won the election after voting for ourselves (which must mean that
+             * this is a single-node cluster). Advance to the next state.
+             */
             if (t == campaignPreElection) {
                 campaign(campaignElection);
             } else {
@@ -681,11 +711,13 @@ public class Raft {
             if (m.getType() == MsgPreVote) {
                 // Never change our term in response to a PreVote
             } else if (m.getType() == MsgPreVoteResp && !m.isReject()) {
-                // We send pre-vote requests with a term in our future. If the
-                // pre-vote is granted, we will increment our term when we get a
-                // quorum. If it is not, the term comes from the node that
-                // rejected our vote so we should become a follower at the new
-                // term.
+                /*
+                 * We send pre-vote requests with a term in our future. If the
+                 * pre-vote is granted, we will increment our term when we get a
+                 * quorum. If it is not, the term comes from the node that
+                 * rejected our vote so we should become a follower at the new
+                 * term.
+                 */
             } else {
                 logger.info("{} [term: {}] received a {} message with higher term from {} [term: {}]",
                         id, term, m.getType(), m.getFrom(), m.getTerm());
@@ -697,28 +729,32 @@ public class Raft {
             }
         } else if (m.getTerm() < term) {
             if ((checkQuorum || preVote) && (m.getType() == MsgHeartbeat || m.getType() == MsgApp)) {
-                // We have received messages from a leader at a lower term. It is possible
-                // that these messages were simply delayed in the network, but this could
-                // also mean that this node has advanced its term number during a network
-                // partition, and it is now unable to either win an election or to rejoin
-                // the majority on the old term. If checkQuorum is false, this will be
-                // handled by incrementing term numbers in response to MsgVote with a
-                // higher term, but if checkQuorum is true we may not advance the term on
-                // MsgVote and must generate other messages to advance the term. The net
-                // result of these two features is to minimize the disruption caused by
-                // nodes that have been removed from the cluster's configuration: a
-                // removed node will send MsgVotes (or MsgPreVotes) which will be ignored,
-                // but it will not receive MsgApp or MsgHeartbeat, so it will not create
-                // disruptive term increases
-                // The above comments also true for Pre-Vote
+                /*
+                 * We have received messages from a leader at a lower term. It is possible
+                 * that these messages were simply delayed in the network, but this could
+                 * also mean that this node has advanced its term number during a network
+                 * partition, and it is now unable to either win an election or to rejoin
+                 * the majority on the old term. If checkQuorum is false, this will be
+                 * handled by incrementing term numbers in response to MsgVote with a
+                 * higher term, but if checkQuorum is true we may not advance the term on
+                 * MsgVote and must generate other messages to advance the term. The net
+                 * result of these two features is to minimize the disruption caused by
+                 * nodes that have been removed from the cluster's configuration: a
+                 * removed node will send MsgVotes (or MsgPreVotes) which will be ignored,
+                 * but it will not receive MsgApp or MsgHeartbeat, so it will not create
+                 * disruptive term increases
+                 * The above comments also true for Pre-Vote
+                 */
                 Message msg = new Message();
                 msg.setTo(m.getFrom());
                 msg.setType(MsgAppResp);
                 send(msg);
             } else if (m.getType() == MsgPreVote) {
-                // Before Pre-Vote enable, there may have candidate with higher term,
-                // but less log. After update to Pre-Vote, the cluster may deadlock if
-                // we drop messages with a lower term.
+                /*
+                 * Before Pre-Vote enable, there may have candidate with higher term,
+                 * but less log. After update to Pre-Vote, the cluster may deadlock if
+                 * we drop messages with a lower term.
+                 */
                 logger.info("{} [logterm: {}, index: {}, vote: {}] rejected {} from {} [logterm: {}, index: {}] at term {}",
                         id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
                 Message msg = new Message();
@@ -737,7 +773,7 @@ public class Raft {
 
         switch (m.getType()) {
             case MsgHup:
-                if (state != StateLeader) {
+                if (state != Leader) {
                     List<Entry> ents = raftLog.slice(raftLog.applied + 1, raftLog.committed + 1, noLimit);
                     int n = numOfPendingConf(ents);
                     if (n != 0 && raftLog.committed > raftLog.applied) {
@@ -774,15 +810,17 @@ public class Raft {
                 if (canVote && raftLog.isUpToDate(m.getIndex(), m.getLogTerm())) {
                     logger.info("{} [logterm: {}, index: {}, vote: {}] cast {} for {} [logterm: {}, index: {}] at term {}",
                             id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
-                    // When responding to Msg{Pre,}Vote messages we include the term
-                    // from the message, not the local term. To see why consider the
-                    // case where a single node was previously partitioned away and
-                    // it's local term is now of date. If we include the local term
-                    // (recall that for pre-votes we don't update the local term), the
-                    // (pre-)campaigning node on the other end will proceed to ignore
-                    // the message (it ignores all out of date messages).
-                    // The term in the original message and current local term are the
-                    // same in the case of regular votes, but different for pre-votes.
+                    /*
+                     * When responding to Msg{Pre,}Vote messages we include the term
+                     * from the message, not the local term. To see why consider the
+                     * case where a single node was previously partitioned away and
+                     * it's local term is now of date. If we include the local term
+                     * (recall that for pre-votes we don't update the local term), the
+                     * (pre-)campaigning node on the other end will proceed to ignore
+                     * the message (it ignores all out of date messages).
+                     * The term in the original message and current local term are the
+                     * same in the case of regular votes, but different for pre-votes.
+                     */
                     Message msg = new Message();
                     msg.setTo(m.getFrom());
                     msg.setTerm(m.getTerm());
@@ -809,8 +847,6 @@ public class Raft {
         }
     }
 
-//    type stepFunc func(r *raft, m pb.Message) error
-
     public BiFunction<Raft, Message, Void> stepLeader = (r, m) -> {
         // These message types do not require any progress for m.From.
         switch (m.getType()) {
@@ -828,15 +864,17 @@ public class Raft {
                     logger.warn("{} stepped empty MsgProp", r.id);
                 }
                 if (r.prs.containsKey(r.id)) {
-                    // If we are not currently a member of the range (i.e. this node
-                    // was removed from the configuration while serving as leader),
-                    // drop any new proposals.
-                    throw new RuntimeException(ErrProposalDropped);
+                    /*
+                     * If we are not currently a member of the range (i.e. this node
+                     * was removed from the configuration while serving as leader),
+                     * drop any new proposals.
+                     */
+                    throw ERR_PROPOSAL_DROPPED;
                 }
 
                 if (r.leadTransferee != None) {
                     logger.debug("{} [term {}] transfer leadership to {} is in progress; dropping proposal", r.id, r.term, r.leadTransferee);
-                    throw new RuntimeException(ErrProposalDropped);
+                    throw ERR_PROPOSAL_DROPPED;
                 }
 
                 for (int i = 0; i < m.getEntries().size(); i++) {
@@ -864,15 +902,17 @@ public class Raft {
                         return null;
                     }
 
-                    // thinking: use an interally defined context instead of the user given context.
-                    // We can express this in terms of the term and index instead of a user-supplied value.
-                    // This would allow multiple reads to piggyback on the same message.
+                    /*
+                     * thinking: use an interally defined context instead of the user given context.
+                     * We can express this in terms of the term and index instead of a user-supplied value.
+                     * This would allow multiple reads to piggyback on the same message.
+                     */
                     switch (r.readOnly.option) {
-                        case ReadOnlySafe:
+                        case Safe:
                             r.readOnly.addRequest(r.raftLog.committed, m);
                             r.bcastHeartbeatWithCtx(m.getEntries().get(0).getData());
                             break;
-                        case ReadOnlyLeaseBased:
+                        case LeaseBased:
                             long ri = r.raftLog.committed;
                             if (m.getFrom() == None || m.getFrom() == r.id) { // from local member
                                 ReadState rs = new ReadState();
@@ -913,7 +953,7 @@ public class Raft {
                             r.id, m.getRejectHint(), m.getFrom(), m.getIndex());
                     if (pr.maybeDecrTo(m.getIndex(), m.getRejectHint())) {
                         logger.debug("{} decreased progress of {} to [{}]", r.id, m.getFrom(), pr);
-                        if (pr.state == ProgressStateReplicate) {
+                        if (pr.state == Replicate) {
                             pr.becomeProbe();
                         }
                         r.sendAppend(m.getFrom());
@@ -921,20 +961,19 @@ public class Raft {
                 } else {
                     boolean oldPaused = pr.isPaused();
                     if (pr.maybeUpdate(m.getIndex())) {
-                        if (pr.state == ProgressStateProbe) {
+                        if (pr.state == Probe) {
                             pr.becomeReplicate();
-                        } else if (pr.state == ProgressStateSnapshot && pr.needSnapshotAbort()) {
+                        } else if (pr.state == Progress.ProgressState.Snapshot && pr.needSnapshotAbort()) {
                             logger.debug("{} snapshot aborted, resumed sending replication messages to {} [{}]", r.id, m.getFrom(), pr);
                             pr.becomeProbe();
-                        } else if (pr.state == ProgressStateReplicate) {
+                        } else if (pr.state == Replicate) {
                             pr.ins.freeTo(m.getIndex());
                         }
 
                         if (r.maybeCommit()) {
                             r.bcastAppend();
                         } else if (oldPaused) {
-                            // update() reset the wait state on this node. If we had delayed sending
-                            // an update before, send it now.
+                            // update() reset the wait state on this node. If we had delayed sending an update before, send it now.
                             r.sendAppend(m.getFrom());
                         }
                         // Transfer leadership is in progress.
@@ -950,14 +989,14 @@ public class Raft {
                 pr.resume();
 
                 // free one slot for the full inflights window to allow progress.
-                if (pr.state == ProgressStateReplicate && pr.ins.full()) {
+                if (pr.state == Replicate && pr.ins.full()) {
                     pr.ins.freeFirstOne();
                 }
                 if (pr.match < r.raftLog.lastIndex()) {
                     r.sendAppend(m.getFrom());
                 }
 
-                if (r.readOnly.option != ReadOnlySafe || m.getContext().length == 0) {
+                if (r.readOnly.option != Safe || m.getContext().length == 0) {
                     return null;
                 }
 
@@ -985,7 +1024,7 @@ public class Raft {
                 }
                 return null;
             case MsgSnapStatus:
-                if (pr.state != ProgressStateSnapshot) {
+                if (pr.state != Progress.ProgressState.Snapshot) {
                     return null;
                 }
                 if (!m.isReject()) {
@@ -996,15 +1035,16 @@ public class Raft {
                     pr.becomeProbe();
                     logger.debug("{} snapshot failed, resumed sending replication messages to {} [{}]", r.id, m.getFrom(), pr);
                 }
-                // If snapshot finish, wait for the msgAppResp from the remote node before sending
-                // out the next msgApp.
-                // If snapshot failure, wait for a heartbeat interval before next try
+                /*
+                 * If snapshot finish, wait for the msgAppResp from the remote node before sending
+                 * out the next msgApp.
+                 * If snapshot failure, wait for a heartbeat interval before next try
+                 */
                 pr.pause();
                 return null;
             case MsgUnreachable:
-                // During optimistic replication, if the remote becomes unreachable,
-                // there is huge probability that a MsgApp is lost.
-                if (pr.state == ProgressStateReplicate) {
+                // During optimistic replication, if the remote becomes unreachable, there is huge probability that a MsgApp is lost.
+                if (pr.state == Replicate) {
                     pr.becomeProbe();
                 }
                 logger.debug("{} failed to send message to {} because it is unreachable [{}]", r.id, m.getFrom(), pr);
@@ -1044,14 +1084,18 @@ public class Raft {
         return null;
     };
 
-    // stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
-    // whether they respond to MsgVoteResp or MsgPreVoteResp.
+    /**
+     * stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
+     * whether they respond to MsgVoteResp or MsgPreVoteResp.
+     */
     public BiFunction<Raft, Message, Void> stepCandidate = (r, m) -> {
-        // Only handle vote responses corresponding to our candidacy (while in
-        // StateCandidate, we may get stale MsgPreVoteResp messages in this term from
-        // our pre-candidate state).
+        /*
+         * Only handle vote responses corresponding to our candidacy (while in
+         * StateCandidate, we may get stale MsgPreVoteResp messages in this term from
+         * our pre-candidate state).
+         */
         MessageType myVoteRespType = null;
-        if (r.state == StatePreCandidate) {
+        if (r.state == PreCandidate) {
             myVoteRespType = MsgPreVoteResp;
         } else {
             myVoteRespType = MsgVoteResp;
@@ -1059,7 +1103,7 @@ public class Raft {
         switch (m.getType()) {
             case MsgProp:
                 logger.info("{} no leader at term {}; dropping proposal", r.id, r.term);
-                throw new RuntimeException(ErrProposalDropped);
+                throw ERR_PROPOSAL_DROPPED;
             case MsgApp:
                 r.becomeFollower(m.getTerm(), m.getFrom()); // always m.Term == r.Term
                 r.handleAppendEntries(m);
@@ -1081,7 +1125,7 @@ public class Raft {
                     logger.info("{} [quorum:{}] has received {} {} votes and {} vote rejections", r.id, r.quorum(), gr, m.getType(), r.votes.size() - gr);
                     int quorum = r.quorum();
                     if (quorum == gr) {
-                        if (r.state == StatePreCandidate) {
+                        if (r.state == PreCandidate) {
                             r.campaign(campaignElection);
                         } else {
                             r.becomeLeader();
@@ -1103,10 +1147,10 @@ public class Raft {
             case MsgProp:
                 if (r.lead == None) {
                     logger.info("{} no leader at term {}; dropping proposal", r.id, r.term);
-                    throw new RuntimeException(ErrProposalDropped);
+                    throw ERR_PROPOSAL_DROPPED;
                 } else if (r.disableProposalForwarding) {
                     logger.info("{} not forwarding to leader {} at term {}; dropping proposal", r.id, r.lead, r.term);
-                    throw new RuntimeException(ErrProposalDropped);
+                    throw ERR_PROPOSAL_DROPPED;
                 }
                 m.setTo(r.lead);
                 r.send(m);
@@ -1137,9 +1181,11 @@ public class Raft {
             case MsgTimeoutNow:
                 if (r.promotable()) {
                     logger.info("{} [term {}] received MsgTimeoutNow from {} and starts an election to get leadership.", r.id, r.term, m.getFrom());
-                    // Leadership transfers never use pre-vote even if r.preVote is true; we
-                    // know we are not recovering from a partition so there is no need for the
-                    // extra round trip.
+                    /*
+                     * Leadership transfers never use pre-vote even if r.preVote is true; we
+                     * know we are not recovering from a partition so there is no need for the
+                     * extra round trip.
+                     */
                     r.campaign(campaignTransfer);
                 } else {
                     logger.info("{} received MsgTimeoutNow from {} but is not promotable", r.id, m.getFrom());
@@ -1229,8 +1275,10 @@ public class Raft {
         }
     }
 
-    // restore recovers the state machine from a snapshot. It restores the log and the
-    // configuration of state machine.
+    /**
+     * restore recovers the state machine from a snapshot. It restores the log and the
+     * configuration of state machine.
+     */
     public boolean restore(Snapshot s) {
         if (s.getMetadata().getIndex() <= raftLog.committed) {
             return false;
@@ -1276,8 +1324,10 @@ public class Raft {
         }
     }
 
-    // promotable indicates whether state machine can be promoted to leader,
-    // which is true when its own id is in progress list.
+    /**
+     * promotable indicates whether state machine can be promoted to leader,
+     * which is true when its own id is in progress list.
+     */
     public boolean promotable() {
         return prs.containsKey(id);
     }
@@ -1302,8 +1352,10 @@ public class Raft {
             }
 
             if (isLearner == pr.isLearner) {
-                // Ignore any redundant addNode calls (which can happen because the
-                // initial bootstrapping entries are applied twice).
+                /*
+                 * Ignore any redundant addNode calls (which can happen because the
+                 * initial bootstrapping entries are applied twice).
+                 */
                 return;
             }
 
@@ -1317,9 +1369,11 @@ public class Raft {
             this.isLearner = isLearner;
         }
 
-        // When a node is first added, we should mark it as recently active.
-        // Otherwise, CheckQuorum may cause us to step down if it is invoked
-        // before the added node has a chance to communicate with us.
+        /*
+         * When a node is first added, we should mark it as recently active.
+         * Otherwise, CheckQuorum may cause us to step down if it is invoked
+         * before the added node has a chance to communicate with us.
+         */
         pr = getProgress(id);
         pr.recentActive = true;
     }
@@ -1332,13 +1386,12 @@ public class Raft {
             return;
         }
 
-        // The quorum size is now smaller, so see if any pending entries can
-        // be committed.
+        // The quorum size is now smaller, so see if any pending entries can be committed.
         if (maybeCommit()) {
             bcastAppend();
         }
         // If the removed node is the leadTransferee, then abort the leadership transferring.
-        if (state == StateLeader && leadTransferee == id) {
+        if (state == Leader && leadTransferee == id) {
             abortLeaderTransfer();
         }
     }
@@ -1355,7 +1408,7 @@ public class Raft {
         }
 
         if (prs.containsKey(id)) {
-            throw new RuntimeException(this.id + " unexpected changing from voter to learner for " + id);
+            throw new Errors.RaftException(this.id + " unexpected changing from voter to learner for " + id);
         }
         Progress progress = new Progress();
         progress.next = next;
@@ -1379,9 +1432,11 @@ public class Raft {
         this.vote = state.getVote();
     }
 
-    // pastElectionTimeout returns true iff r.electionElapsed is greater
-    // than or equal to the randomized election timeout in
-    // [electiontimeout, 2 * electiontimeout - 1].
+    /**
+     * pastElectionTimeout returns true iff r.electionElapsed is greater
+     * than or equal to the randomized election timeout in
+     * [electiontimeout, 2 * electiontimeout - 1].
+     */
     public boolean pastElectionTimeout() {
         return electionElapsed >= randomizedElectionTimeout;
     }
@@ -1390,10 +1445,12 @@ public class Raft {
         randomizedElectionTimeout = electionTimeout + ThreadLocalRandom.current().nextInt(electionTimeout);
     }
 
-    // checkQuorumActive returns true if the quorum is active from
-    // the view of the local raft state machine. Otherwise, it returns
-    // false.
-    // checkQuorumActive also resets all RecentActive to false.
+    /**
+     * checkQuorumActive returns true if the quorum is active from
+     * the view of the local raft state machine. Otherwise, it returns
+     * false.
+     * checkQuorumActive also resets all RecentActive to false.
+     */
     public boolean checkQuorumActive() {
         final AtomicInteger act = new AtomicInteger(0);
 
@@ -1442,7 +1499,7 @@ public class Raft {
          */
         public long lead;
 
-        public long raftState;
+        public StateRole raftState;
 
         @Override
         public String toString() {
@@ -1457,112 +1514,145 @@ public class Raft {
         }
     }
 
+    /**
+     * Config contains the parameters to start a raft.
+     */
     public static class Config {
-        // ID is the identity of the local raft. ID cannot be 0.
+
+        /**
+         * ID is the identity of the local raft. ID cannot be 0.
+         */
         public long id;
 
-        // peers contains the IDs of all nodes (including self) in the raft cluster. It
-        // should only be set when starting a new raft cluster. Restarting raft from
-        // previous configuration will panic if peers is set. peer is private and only
-        // used for testing right now.
+        /**
+         * peers contains the IDs of all nodes (including self) in the raft cluster. It
+         * should only be set when starting a new raft cluster. Restarting raft from
+         * previous configuration will panic if peers is set. peer is private and only
+         * used for testing right now.
+         */
         public List<Long> peers;
 
-        // learners contains the IDs of all learner nodes (including self if the
-        // local node is a learner) in the raft cluster. learners only receives
-        // entries from the leader node. It does not vote or promote itself.
+        /**
+         * learners contains the IDs of all learner nodes (including self if the
+         * local node is a learner) in the raft cluster. learners only receives
+         * entries from the leader node. It does not vote or promote itself.
+         */
         public List<Long> learners;
 
-        // ElectionTick is the number of Node.Tick invocations that must pass between
-        // elections. That is, if a follower does not receive any message from the
-        // leader of current term before ElectionTick has elapsed, it will become
-        // candidate and start an election. ElectionTick must be greater than
-        // HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid
-        // unnecessary leader switching.
+        /**
+         * ElectionTick is the number of Node.Tick invocations that must pass between
+         * elections. That is, if a follower does not receive any message from the
+         * leader of current term before ElectionTick has elapsed, it will become
+         * candidate and start an election. ElectionTick must be greater than
+         * HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid
+         * unnecessary leader switching.
+         */
         public int electionTick;
-        // HeartbeatTick is the number of Node.Tick invocations that must pass between
-        // heartbeats. That is, a leader sends heartbeat messages to maintain its
-        // leadership every HeartbeatTick ticks.
+
+        /**
+         * HeartbeatTick is the number of Node.Tick invocations that must pass between
+         * heartbeats. That is, a leader sends heartbeat messages to maintain its
+         * leadership every HeartbeatTick ticks.
+         */
         public int heartbeatTick;
 
-        // Storage is the storage for raft. raft generates entries and states to be
-        // stored in storage. raft reads the persisted entries and states out of
-        // Storage when it needs. raft reads out the previous state and configuration
-        // out of storage when restarting.
+        /**
+         * Storage is the storage for raft. raft generates entries and states to be
+         * stored in storage. raft reads the persisted entries and states out of
+         * Storage when it needs. raft reads out the previous state and configuration
+         * out of storage when restarting.
+         */
         public Storage storage;
-        // Applied is the last applied index. It should only be set when restarting
-        // raft. raft will not return entries to the application smaller or equal to
-        // Applied. If Applied is unset when restarting, raft might return previous
-        // applied entries. This is a very application dependent configuration.
+
+        /**
+         * Applied is the last applied index. It should only be set when restarting
+         * raft. raft will not return entries to the application smaller or equal to
+         * Applied. If Applied is unset when restarting, raft might return previous
+         * applied entries. This is a very application dependent configuration.
+         */
         public long applied;
 
-        // MaxSizePerMsg limits the max size of each append message. Smaller value
-        // lowers the raft recovery cost(initial probing and message lost during normal
-        // operation). On the other side, it might affect the throughput during normal
-        // replication. Note: math.MaxUint64 for unlimited, 0 for at most one entry per
-        // message.
+        /**
+         * MaxSizePerMsg limits the max size of each append message. Smaller value
+         * lowers the raft recovery cost(initial probing and message lost during normal
+         * operation). On the other side, it might affect the throughput during normal
+         * replication. Note: math.MaxUint64 for unlimited, 0 for at most one entry per
+         * message.
+         */
         public long maxSizePerMsg;
-        // MaxInflightMsgs limits the max number of in-flight append messages during
-        // optimistic replication phase. The application transportation layer usually
-        // has its own sending buffer over TCP/UDP. Setting MaxInflightMsgs to avoid
-        // overflowing that sending buffer. TODO (xiangli): feedback to application to
-        // limit the proposal rate?
+
+        /**
+         * MaxInflightMsgs limits the max number of in-flight append messages during
+         * optimistic replication phase. The application transportation layer usually
+         * has its own sending buffer over TCP/UDP. Setting MaxInflightMsgs to avoid
+         * overflowing that sending buffer. TODO (xiangli): feedback to application to
+         * limit the proposal rate?
+         */
         public int maxInflightMsgs;
 
-        // CheckQuorum specifies if the leader should check quorum activity. Leader
-        // steps down when quorum is not active for an electionTimeout.
+        /**
+         * CheckQuorum specifies if the leader should check quorum activity. Leader
+         * steps down when quorum is not active for an electionTimeout.
+         */
         public boolean checkQuorum;
 
-        // PreVote enables the Pre-Vote algorithm described in raft thesis section
-        // 9.6. This prevents disruption when a node that has been partitioned away
-        // rejoins the cluster.
+        /**
+         * PreVote enables the Pre-Vote algorithm described in raft thesis section
+         * 9.6. This prevents disruption when a node that has been partitioned away
+         * rejoins the cluster.
+         */
         public boolean preVote;
 
-        // ReadOnlyOption specifies how the read only request is processed.
-        //
-        // ReadOnlySafe guarantees the linearizability of the read only request by
-        // communicating with the quorum. It is the default and suggested option.
-        //
-        // ReadOnlyLeaseBased ensures linearizability of the read only request by
-        // relying on the leader lease. It can be affected by clock drift.
-        // If the clock drift is unbounded, leader might keep the lease longer than it
-        // should (clock can move backward/pause without any bound). ReadIndex is not safe
-        // in that case.
-        // CheckQuorum MUST be enabled if ReadOnlyOption is ReadOnlyLeaseBased.
-        public int readOnlyOption;
+        /**
+         * ReadOnlyOption specifies how the read only request is processed.
+         * <p>
+         * Safe guarantees the linearizability of the read only request by
+         * communicating with the quorum. It is the default and suggested option.
+         * <p>
+         * LeaseBased ensures linearizability of the read only request by
+         * relying on the leader lease. It can be affected by clock drift.
+         * If the clock drift is unbounded, leader might keep the lease longer than it
+         * should (clock can move backward/pause without any bound). ReadIndex is not safe
+         * in that case.
+         * CheckQuorum MUST be enabled if ReadOnlyOption is LeaseBased.
+         */
+        public ReadOnly.ReadOnlyOption readOnlyOption;
 
-        // DisableProposalForwarding set to true means that followers will drop
-        // proposals, rather than forwarding them to the leader. One use case for
-        // this feature would be in a situation where the Raft leader is used to
-        // compute the data of a proposal, for example, adding a timestamp from a
-        // hybrid logical clock to data in a monotonically increasing way. Forwarding
-        // should be disabled to prevent a follower with an innaccurate hybrid
-        // logical clock from assigning the timestamp and then forwarding the data
-        // to the leader.
+        /**
+         * DisableProposalForwarding set to true means that followers will drop
+         * proposals, rather than forwarding them to the leader. One use case for
+         * this feature would be in a situation where the Raft leader is used to
+         * compute the data of a proposal, for example, adding a timestamp from a
+         * hybrid logical clock to data in a monotonically increasing way. Forwarding
+         * should be disabled to prevent a follower with an innaccurate hybrid
+         * logical clock from assigning the timestamp and then forwarding the data
+         * to the leader.
+         */
         public boolean disableProposalForwarding;
 
         public void validate() {
             if (id == None) {
-                throw new RuntimeException("cannot use none as id");
+                throw new Errors.RaftConfigException("cannot use none as id");
             }
 
             if (heartbeatTick <= 0) {
-                throw new RuntimeException("heartbeat tick must be greater than 0");
+                throw new Errors.RaftConfigException("heartbeat tick must be greater than 0");
             }
 
             if (electionTick <= heartbeatTick) {
-                throw new RuntimeException("election tick must be greater than heartbeat tick");
+                throw new Errors.RaftConfigException("election tick must be greater than heartbeat tick");
             }
 
             if (storage == null) {
-                throw new RuntimeException("storage cannot be nil");
+                throw new Errors.RaftConfigException("storage cannot be nil");
             }
 
             if (maxInflightMsgs <= 0) {
-                throw new RuntimeException("max inflight messages must be greater than 0");
+                throw new Errors.RaftConfigException("max inflight messages must be greater than 0");
             }
 
-            if (readOnlyOption == ReadOnlyLeaseBased && !checkQuorum) {
-                throw new RuntimeException("CheckQuorum must be enabled when ReadOnlyOption is ReadOnlyLeaseBased");
+            if (readOnlyOption == LeaseBased && !checkQuorum) {
+                throw new Errors.RaftConfigException("CheckQuorum must be enabled when ReadOnlyOption is LeaseBased");
             }
         }
     }
