@@ -1,12 +1,14 @@
 package com.moilioncircle.raft;
 
 import com.moilioncircle.raft.entity.Message;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.moilioncircle.raft.util.Arrays.slice;
 
@@ -14,26 +16,14 @@ public class ReadOnly {
 
     private static final Logger logger = LoggerFactory.getLogger(ReadOnly.class);
 
-    private int option;
-    private Map<String, ReadIndexStatus> pendingReadIndex;
-    private List<String> readIndexQueue;
+    public int option;
+    public Map<String, ReadIndexStatus> pendingReadIndex;
+    public List<String> readIndexQueue;
 
     public ReadOnly(int option) {
         this.option = option;
         this.pendingReadIndex = new HashMap<>();
         this.readIndexQueue = new ArrayList<>();
-    }
-
-    public int getOption() {
-        return option;
-    }
-
-    public Map<String, ReadIndexStatus> getPendingReadIndex() {
-        return pendingReadIndex;
-    }
-
-    public List<String> getReadIndexQueue() {
-        return readIndexQueue;
     }
 
     /**
@@ -103,9 +93,7 @@ public class ReadOnly {
      * request in readonly struct.
      */
     public String lastPendingRequestCtx() {
-        if (readIndexQueue.size() == 0) {
-            return "";
-        }
+        if (readIndexQueue.size() == 0) return "";
         return readIndexQueue.get(readIndexQueue.size() - 1);
     }
 
@@ -117,22 +105,22 @@ public class ReadOnly {
      * RequestCtx
      */
     public static class ReadState {
-        private long index;
-        private byte[] requestCtx;
+        public long index;
+        public byte[] requestCtx;
 
-        public long getIndex() {
-            return index;
-        }
-
-        public byte[] getRequestCtx() {
-            return requestCtx;
+        @Override
+        public String toString() {
+            return "ReadState{" +
+                    "index=" + index +
+                    ", requestCtx=" + Arrays.toString(requestCtx) +
+                    '}';
         }
     }
 
     public static class ReadIndexStatus {
-        private Message req;
-        private long index;
-        private Map<Long, Object> acks;
+        public Message req;
+        public long index;
+        public Map<Long, Object> acks;
 
         public ReadIndexStatus(Message req, long index, Map<Long, Object> acks) {
             this.req = req;
@@ -140,16 +128,13 @@ public class ReadOnly {
             this.acks = acks;
         }
 
-        public Message getReq() {
-            return req;
-        }
-
-        public long getIndex() {
-            return index;
-        }
-
-        public Map<Long, Object> getAcks() {
-            return acks;
+        @Override
+        public String toString() {
+            return "ReadIndexStatus{" +
+                    "req=" + req +
+                    ", index=" + index +
+                    ", acks=" + acks +
+                    '}';
         }
     }
 }

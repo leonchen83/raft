@@ -1,10 +1,22 @@
 package com.moilioncircle.raft;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Arrays;
 
+import static java.lang.Math.min;
+
 public class Progress {
-    private long match;
-    private long next;
+
+    private static final Logger logger = LoggerFactory.getLogger(Progress.class);
+
+    public static final long ProgressStateProbe = 0L;
+    public static final long ProgressStateReplicate = 1L;
+    public static final long ProgressStateSnapshot = 2L;
+
+    public long match;
+    public long next;
 
     /**
      * State defines how the leader should interact with the follower.
@@ -19,13 +31,13 @@ public class Progress {
      * When in ProgressStateSnapshot, leader should have sent out snapshot
      * before and stops sending any replication message.
      */
-    private long state;
+    public long state;
 
     /**
      * Paused is used in ProgressStateProbe.
      * When Paused is true, raft should pause sending replication message to this peer.
      */
-    private boolean paused;
+    public boolean paused;
 
     /**
      * PendingSnapshot is used in ProgressStateSnapshot.
@@ -34,14 +46,14 @@ public class Progress {
      * this Progress will be paused. raft will not resend snapshot until the pending one
      * is reported to be failed.
      */
-    private long pendingSnapshot;
+    public long pendingSnapshot;
 
     /**
      * RecentActive is true if the progress is recently active. Receiving any messages
      * from the corresponding follower indicates the progress is active.
      * RecentActive can be reset to false after an election timeout.
      */
-    private boolean recentActive;
+    public boolean recentActive;
 
     /**
      * inflights is a sliding window for the inflight messages.
@@ -57,43 +69,113 @@ public class Progress {
      * be freed by calling inflights.freeTo with the index of the last
      * received entry.
      */
-    private Inflights ins;
+    public Inflights ins;
 
     /**
      * IsLearner is true if this progress is tracked for a learner.
      */
-    private boolean isLearner;
+    public boolean isLearner;
 
-    public long getMatch() {
-        return match;
+    public void resetState(long state) {
+        this.paused = false;
+        this.pendingSnapshot = 0;
+        this.state = state;
+        this.ins.reset();
     }
 
-    public long getNext() {
-        return next;
+    public void becomeProbe() {
+        // If the original state is ProgressStateSnapshot, progress knows that
+        // the pending snapshot has been sent to this peer successfully, then
+        // probes from pendingSnapshot + 1.
+        if (state == ProgressStateSnapshot) {
+            long pendingSnapshot = this.pendingSnapshot;
+            resetState(ProgressStateProbe);
+            next = Math.max(match + 1, pendingSnapshot + 1);
+        } else {
+            resetState(ProgressStateProbe);
+            next = match + 1;
+        }
     }
 
-    public long getState() {
-        return state;
+    public void becomeReplicate() {
+        resetState(ProgressStateReplicate);
+        next = match + 1;
     }
 
-    public boolean isPaused() {
-        return paused;
+    public void becomeSnapshot(long snapshoti) {
+        resetState(ProgressStateSnapshot);
+        pendingSnapshot = snapshoti;
     }
 
-    public long getPendingSnapshot() {
-        return pendingSnapshot;
+    // maybeUpdate returns false if the given n index comes from an outdated message.
+    // Otherwise it updates the progress and returns true.
+    public boolean maybeUpdate(long n) {
+        boolean updated = false;
+        if (match < n) {
+            match = n;
+            updated = true;
+            resume();
+        }
+        if (next < n + 1) {
+            next = n + 1;
+        }
+        return updated;
     }
 
-    public boolean isRecentActive() {
-        return recentActive;
+    public void optimisticUpdate(long n) { next = n + 1; }
+
+    // maybeDecrTo returns false if the given to index comes from an out of order message.
+    // Otherwise it decreases the progress next index to min(rejected, last) and returns true.
+    public boolean maybeDecrTo(long rejected, long last) {
+        if (state == ProgressStateReplicate) {
+            // the rejection must be stale if the progress has matched and "rejected"
+            // is smaller than "match".
+            if (rejected <= match) {
+                return false;
+            }
+            // directly decrease next to match + 1
+            next = match + 1;
+            return true;
+        }
+
+        // the rejection must be stale if "rejected" does not match next - 1
+        if (next - 1 != rejected) {
+            return false;
+        }
+
+        if ((next = min(rejected, last + 1)) < 1) {
+            next = 1;
+        }
+        resume();
+        return true;
     }
 
-    public Inflights getIns() {
-        return ins;
+    public void pause() { paused = true; }
+
+    public void resume() { paused = false; }
+
+    // IsPaused returns whether sending log entries to this node has been
+    // paused. A node may be paused because it has rejected recent
+    // MsgApps, is currently waiting for a snapshot, or has reached the
+    // MaxInflightMsgs limit.
+    public boolean IsPaused() {
+        if (state == ProgressStateProbe) {
+            return paused;
+        } else if (state == ProgressStateReplicate) {
+            return ins.full();
+        } else if (state == ProgressStateSnapshot) {
+            return true;
+        } else {
+            throw new AssertionError("unexpected state");
+        }
     }
 
-    public boolean isLearner() {
-        return isLearner;
+    public void snapshotFailure() { pendingSnapshot = 0; }
+
+    // needSnapshotAbort returns true if snapshot progress's Match
+    // is equal or higher than the pendingSnapshot.
+    public boolean needSnapshotAbort() {
+        return state == ProgressStateSnapshot && match >= pendingSnapshot;
     }
 
     @Override
@@ -114,38 +196,104 @@ public class Progress {
         /**
          * the starting index in the buffer
          */
-        private int start;
+        public int start;
 
         /**
          * number of inflights in the buffer
          */
-        private int count;
+        public int count;
 
         /**
          * the size of the buffer
          */
-        private int size;
+        public int size;
 
         /**
          * buffer contains the index of the last entry
          * inside one message.
          */
-        private long[] buffer;
+        public long[] buffer;
 
-        public int getStart() {
-            return start;
+        public Inflights(int size) {
+            this.size = size;
         }
 
-        public int getCount() {
-            return count;
+        // add adds an inflight into inflights
+        public void add(long inflight) {
+            if (full()) {
+                logger.warn("cannot add into a full inflights");
+            }
+            int next = start + count;
+            int size = this.size;
+            if (next >= size) {
+                next -= size;
+            }
+            if (next >= buffer.length) {
+                growBuf();
+            }
+            buffer[next] = inflight;
+            count++;
         }
 
-        public int getSize() {
-            return size;
+        // grow the inflight buffer by doubling up to inflights.size. We grow on demand
+        // instead of preallocating to inflights.size to handle systems which have
+        // thousands of Raft groups per process.
+        public void growBuf() {
+            int newSize = buffer.length * 2;
+            if (newSize == 0) {
+                newSize = 1;
+            } else if (newSize > size) {
+                newSize = size;
+            }
+            long[] newBuffer = new long[newSize];
+            System.arraycopy(buffer, 0, newBuffer, 0, buffer.length);
+            this.buffer = newBuffer;
         }
 
-        public long[] getBuffer() {
-            return buffer;
+        // freeTo frees the inflights smaller or equal to the given `to` flight.
+        public void freeTo(long to) {
+            if (count == 0 || to < buffer[start]) {
+                // out of the left side of the window
+                return;
+            }
+
+            int idx = start;
+            int i = 0;
+            for (i = 0; i < count; i++) {
+                if (to < buffer[idx]) { // found the first large inflight
+                    break;
+                }
+
+                // increase index and maybe rotate
+                int size = this.size;
+                idx++;
+                if (idx >= size) {
+                    idx -= size;
+                }
+            }
+            // free i inflights and set new start index
+            count -= i;
+            start = idx;
+            if (count == 0) {
+                // inflights is empty, reset the start index so that we don't grow the
+                // buffer unnecessarily.
+                start = 0;
+            }
+        }
+
+        public void freeFirstOne() {
+            freeTo(buffer[start]);
+        }
+
+        // full returns true if the inflights is full.
+        public boolean full() {
+            return count == size;
+        }
+
+        // resets frees all inflights.
+        public void reset() {
+            count = 0;
+            start = 0;
         }
 
         @Override

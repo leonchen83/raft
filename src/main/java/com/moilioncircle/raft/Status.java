@@ -10,36 +10,12 @@ import static com.moilioncircle.raft.Raft.StateLeader;
 
 public class Status {
 
-    private long id;
-    private long applied;
-    private HardState hardState;
-    private SoftState softState;
-    private long leadTransferee;
-    private Map<Long, Progress> progress;
-
-    public long getId() {
-        return id;
-    }
-
-    public HardState getHardState() {
-        return hardState;
-    }
-
-    public SoftState getSoftState() {
-        return softState;
-    }
-
-    public long getApplied() {
-        return applied;
-    }
-
-    public Map<Long, Progress> getProgress() {
-        return progress;
-    }
-
-    public long getLeadTransferee() {
-        return leadTransferee;
-    }
+    public long id;
+    public long applied;
+    public HardState hardState;
+    public SoftState softState;
+    public long leadTransferee;
+    public Map<Long, Progress> progress;
 
     // getStatus gets a copy of the current raft status.
     public Status getStatus(Raft r) {
@@ -48,9 +24,9 @@ public class Status {
         s.leadTransferee = r.leadTransferee;
         s.hardState = r.hardState();
         s.softState = r.softState();
-        s.applied = r.raftLog.getApplied();
+        s.applied = r.raftLog.applied;
 
-        if (s.softState.getRaftState() == StateLeader) {
+        if (s.softState.raftState == StateLeader) {
             s.progress = new HashMap<>();
             for (Map.Entry<Long, Progress> entry : r.prs.entrySet()) {
                 s.progress.put(entry.getKey(), entry.getValue());

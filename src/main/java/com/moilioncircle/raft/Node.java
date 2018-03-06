@@ -7,25 +7,9 @@ public class Node {
         /**
          * must use atomic operations to access; keep 64-bit aligned.
          */
-        private long lead;
+        public long lead;
 
-        private long raftState;
-
-        public long getLead() {
-            return lead;
-        }
-
-        public long getRaftState() {
-            return raftState;
-        }
-
-        public void setLead(long lead) {
-            this.lead = lead;
-        }
-
-        public void setRaftState(long raftState) {
-            this.raftState = raftState;
-        }
+        public long raftState;
 
         @Override
         public String toString() {

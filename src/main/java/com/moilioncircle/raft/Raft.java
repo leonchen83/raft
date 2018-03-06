@@ -1,10 +1,10 @@
 package com.moilioncircle.raft;
 
-import com.moilioncircle.raft.Log.RaftLog;
 import com.moilioncircle.raft.Node.SoftState;
 import com.moilioncircle.raft.ReadOnly.ReadState;
 import com.moilioncircle.raft.entity.HardState;
 import com.moilioncircle.raft.entity.Message;
+
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -16,6 +16,9 @@ public class Raft {
     public static final long StateLeader = 2;
     public static final long StatePreCandidate = 3;
     public static final long NumStates = 4;
+
+    public static final long None = 0;
+    public static final long noLimit = Long.MAX_VALUE;
 
     public long id;
 
@@ -102,13 +105,13 @@ public class Raft {
     public BiFunction<Raft, Message, Void> step;
 
     public HardState hardState() {
-        return new HardState(term, vote, raftLog.getCommitted());
+        return new HardState(term, vote, raftLog.committed);
     }
 
     public SoftState softState() {
         SoftState soft = new SoftState();
-        soft.setLead(lead);
-        soft.setRaftState(state);
+        soft.lead = lead;
+        soft.raftState = state;
         return soft;
     }
 }
