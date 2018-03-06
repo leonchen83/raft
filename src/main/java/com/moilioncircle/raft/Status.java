@@ -1,6 +1,6 @@
 package com.moilioncircle.raft;
 
-import com.moilioncircle.raft.Node.SoftState;
+import com.moilioncircle.raft.Raft.SoftState;
 import com.moilioncircle.raft.entity.HardState;
 
 import java.util.HashMap;
@@ -18,7 +18,7 @@ public class Status {
     public Map<Long, Progress> progress;
 
     // getStatus gets a copy of the current raft status.
-    public Status getStatus(Raft r) {
+    public static Status getStatus(Raft r) {
         Status s = new Status();
         s.id = r.id;
         s.leadTransferee = r.leadTransferee;

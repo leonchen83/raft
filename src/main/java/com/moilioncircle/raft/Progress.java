@@ -20,14 +20,14 @@ public class Progress {
 
     /**
      * State defines how the leader should interact with the follower.
-     *
+     * <p>
      * When in ProgressStateProbe, leader sends at most one replication message
      * per heartbeat interval. It also probes actual progress of the follower.
-     *
+     * <p>
      * When in ProgressStateReplicate, leader optimistically increases next
      * to the latest entry sent after sending replication message. This is
      * an optimized state for fast replicating log entries to the follower.
-     *
+     * <p>
      * When in ProgressStateSnapshot, leader should have sent out snapshot
      * before and stops sending any replication message.
      */
@@ -158,7 +158,7 @@ public class Progress {
     // paused. A node may be paused because it has rejected recent
     // MsgApps, is currently waiting for a snapshot, or has reached the
     // MaxInflightMsgs limit.
-    public boolean IsPaused() {
+    public boolean isPaused() {
         if (state == ProgressStateProbe) {
             return paused;
         } else if (state == ProgressStateReplicate) {
@@ -218,7 +218,9 @@ public class Progress {
             this.size = size;
         }
 
-        // add adds an inflight into inflights
+        /**
+         * add adds an inflight into inflights
+         */
         public void add(long inflight) {
             if (full()) {
                 logger.warn("cannot add into a full inflights");
@@ -235,9 +237,11 @@ public class Progress {
             count++;
         }
 
-        // grow the inflight buffer by doubling up to inflights.size. We grow on demand
-        // instead of preallocating to inflights.size to handle systems which have
-        // thousands of Raft groups per process.
+        /**
+         * grow the inflight buffer by doubling up to inflights.size. We grow on demand
+         * instead of preallocating to inflights.size to handle systems which have
+         * thousands of Raft groups per process.
+         */
         public void growBuf() {
             int newSize = buffer.length * 2;
             if (newSize == 0) {
@@ -250,7 +254,9 @@ public class Progress {
             this.buffer = newBuffer;
         }
 
-        // freeTo frees the inflights smaller or equal to the given `to` flight.
+        /**
+         * freeTo frees the inflights smaller or equal to the given `to` flight.
+         */
         public void freeTo(long to) {
             if (count == 0 || to < buffer[start]) {
                 // out of the left side of the window
@@ -285,12 +291,16 @@ public class Progress {
             freeTo(buffer[start]);
         }
 
-        // full returns true if the inflights is full.
+        /**
+         * full returns true if the inflights is full.
+         */
         public boolean full() {
             return count == size;
         }
 
-        // resets frees all inflights.
+        /**
+         * resets frees all inflights.
+         */
         public void reset() {
             count = 0;
             start = 0;
