@@ -1,5 +1,7 @@
 package com.moilioncircle.raft;
 
+import java.util.Arrays;
+
 public class Progress {
     private long match;
     private long next;
@@ -94,6 +96,20 @@ public class Progress {
         return isLearner;
     }
 
+    @Override
+    public String toString() {
+        return "Progress{" +
+                "match=" + match +
+                ", next=" + next +
+                ", state=" + state +
+                ", paused=" + paused +
+                ", pendingSnapshot=" + pendingSnapshot +
+                ", recentActive=" + recentActive +
+                ", ins=" + ins +
+                ", isLearner=" + isLearner +
+                '}';
+    }
+
     public static class Inflights {
         /**
          * the starting index in the buffer
@@ -130,6 +146,16 @@ public class Progress {
 
         public long[] getBuffer() {
             return buffer;
+        }
+
+        @Override
+        public String toString() {
+            return "Inflights{" +
+                    "start=" + start +
+                    ", count=" + count +
+                    ", size=" + size +
+                    ", buffer=" + Arrays.toString(buffer) +
+                    '}';
         }
     }
 }

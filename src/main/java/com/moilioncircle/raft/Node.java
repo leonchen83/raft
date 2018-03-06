@@ -26,5 +26,13 @@ public class Node {
         public void setRaftState(long raftState) {
             this.raftState = raftState;
         }
+
+        @Override
+        public String toString() {
+            return "SoftState{" +
+                    "lead=" + lead +
+                    ", raftState=" + raftState +
+                    '}';
+        }
     }
 }
