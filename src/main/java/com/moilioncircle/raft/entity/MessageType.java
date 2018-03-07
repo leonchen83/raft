@@ -17,7 +17,7 @@
 package com.moilioncircle.raft.entity;
 
 import com.moilioncircle.raft.Errors;
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 
 /**
  * @author Leon Chen
@@ -51,11 +51,13 @@ public enum MessageType {
         this.value = value;
     }
 
-    public static RaftProto.MessageType build(MessageType type) {
-        return RaftProto.MessageType.forNumber(type.value);
+    public static RaftProtos.MessageType build(MessageType type) {
+        if (type == null) return null;
+        return RaftProtos.MessageType.forNumber(type.value);
     }
 
-    public static MessageType valueOf(RaftProto.MessageType type) {
+    public static MessageType valueOf(RaftProtos.MessageType type) {
+        if (type == null) return null;
         switch (type.getNumber()) {
             case 0:
                 return MsgHup;

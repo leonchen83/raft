@@ -16,7 +16,7 @@
 
 package com.moilioncircle.raft.entity;
 
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 
 /**
  * @author Leon Chen
@@ -35,11 +35,13 @@ public enum ConfChangeType {
         this.value = value;
     }
 
-    public static RaftProto.ConfChangeType build(ConfChangeType type) {
-        return RaftProto.ConfChangeType.forNumber(type.value);
+    public static RaftProtos.ConfChangeType build(ConfChangeType type) {
+        if (type == null) return null;
+        return RaftProtos.ConfChangeType.forNumber(type.value);
     }
 
-    public static ConfChangeType valueOf(RaftProto.ConfChangeType type) {
+    public static ConfChangeType valueOf(RaftProtos.ConfChangeType type) {
+        if (type == null) return null;
         switch (type.getNumber()) {
             case 0:
                 return ConfChangeAddNode;

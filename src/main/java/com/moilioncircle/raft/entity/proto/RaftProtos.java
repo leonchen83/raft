@@ -3,8 +3,8 @@
 
 package com.moilioncircle.raft.entity.proto;
 
-public final class RaftProto {
-  private RaftProto() {}
+public final class RaftProtos {
+    private RaftProtos() {}
   public static void registerAllExtensions(
       com.google.protobuf.ExtensionRegistryLite registry) {
   }
@@ -86,7 +86,7 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.EnumDescriptor
         getDescriptor() {
-      return RaftProto.getDescriptor().getEnumTypes().get(0);
+        return RaftProtos.getDescriptor().getEnumTypes().get(0);
     }
 
     private static final EntryType[] VALUES = values();
@@ -337,7 +337,7 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.EnumDescriptor
         getDescriptor() {
-      return RaftProto.getDescriptor().getEnumTypes().get(1);
+        return RaftProtos.getDescriptor().getEnumTypes().get(1);
     }
 
     private static final MessageType[] VALUES = values();
@@ -453,7 +453,7 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.EnumDescriptor
         getDescriptor() {
-      return RaftProto.getDescriptor().getEnumTypes().get(2);
+        return RaftProtos.getDescriptor().getEnumTypes().get(2);
     }
 
     private static final ConfChangeType[] VALUES = values();
@@ -592,12 +592,12 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return RaftProto.internal_static_raftpb_Entry_descriptor;
+        return RaftProtos.internal_static_raftpb_Entry_descriptor;
     }
 
     protected FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return RaftProto.internal_static_raftpb_Entry_fieldAccessorTable
+        return RaftProtos.internal_static_raftpb_Entry_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
               Entry.class, Builder.class);
     }
@@ -839,12 +839,12 @@ public final class RaftProto {
         EntryOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return RaftProto.internal_static_raftpb_Entry_descriptor;
+          return RaftProtos.internal_static_raftpb_Entry_descriptor;
       }
 
       protected FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return RaftProto.internal_static_raftpb_Entry_fieldAccessorTable
+          return RaftProtos.internal_static_raftpb_Entry_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
                 Entry.class, Builder.class);
       }
@@ -879,7 +879,7 @@ public final class RaftProto {
 
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return RaftProto.internal_static_raftpb_Entry_descriptor;
+          return RaftProtos.internal_static_raftpb_Entry_descriptor;
       }
 
       public Entry getDefaultInstanceForType() {
@@ -1265,12 +1265,12 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return RaftProto.internal_static_raftpb_SnapshotMetadata_descriptor;
+        return RaftProtos.internal_static_raftpb_SnapshotMetadata_descriptor;
     }
 
     protected FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return RaftProto.internal_static_raftpb_SnapshotMetadata_fieldAccessorTable
+        return RaftProtos.internal_static_raftpb_SnapshotMetadata_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
               SnapshotMetadata.class, Builder.class);
     }
@@ -1503,12 +1503,12 @@ public final class RaftProto {
         SnapshotMetadataOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return RaftProto.internal_static_raftpb_SnapshotMetadata_descriptor;
+          return RaftProtos.internal_static_raftpb_SnapshotMetadata_descriptor;
       }
 
       protected FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return RaftProto.internal_static_raftpb_SnapshotMetadata_fieldAccessorTable
+          return RaftProtos.internal_static_raftpb_SnapshotMetadata_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
                 SnapshotMetadata.class, Builder.class);
       }
@@ -1545,7 +1545,7 @@ public final class RaftProto {
 
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return RaftProto.internal_static_raftpb_SnapshotMetadata_descriptor;
+          return RaftProtos.internal_static_raftpb_SnapshotMetadata_descriptor;
       }
 
       public SnapshotMetadata getDefaultInstanceForType() {
@@ -1964,12 +1964,12 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return RaftProto.internal_static_raftpb_Snapshot_descriptor;
+        return RaftProtos.internal_static_raftpb_Snapshot_descriptor;
     }
 
     protected FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return RaftProto.internal_static_raftpb_Snapshot_fieldAccessorTable
+        return RaftProtos.internal_static_raftpb_Snapshot_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
               Snapshot.class, Builder.class);
     }
@@ -2180,12 +2180,12 @@ public final class RaftProto {
         SnapshotOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return RaftProto.internal_static_raftpb_Snapshot_descriptor;
+          return RaftProtos.internal_static_raftpb_Snapshot_descriptor;
       }
 
       protected FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return RaftProto.internal_static_raftpb_Snapshot_fieldAccessorTable
+          return RaftProtos.internal_static_raftpb_Snapshot_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
                 Snapshot.class, Builder.class);
       }
@@ -2220,7 +2220,7 @@ public final class RaftProto {
 
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return RaftProto.internal_static_raftpb_Snapshot_descriptor;
+          return RaftProtos.internal_static_raftpb_Snapshot_descriptor;
       }
 
       public Snapshot getDefaultInstanceForType() {
@@ -2753,12 +2753,12 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return RaftProto.internal_static_raftpb_Message_descriptor;
+        return RaftProtos.internal_static_raftpb_Message_descriptor;
     }
 
     protected FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return RaftProto.internal_static_raftpb_Message_fieldAccessorTable
+        return RaftProtos.internal_static_raftpb_Message_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
               Message.class, Builder.class);
     }
@@ -3212,12 +3212,12 @@ public final class RaftProto {
         MessageOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return RaftProto.internal_static_raftpb_Message_descriptor;
+          return RaftProtos.internal_static_raftpb_Message_descriptor;
       }
 
       protected FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return RaftProto.internal_static_raftpb_Message_fieldAccessorTable
+          return RaftProtos.internal_static_raftpb_Message_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
                 Message.class, Builder.class);
       }
@@ -3277,7 +3277,7 @@ public final class RaftProto {
 
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return RaftProto.internal_static_raftpb_Message_descriptor;
+          return RaftProtos.internal_static_raftpb_Message_descriptor;
       }
 
       public Message getDefaultInstanceForType() {
@@ -4232,12 +4232,12 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return RaftProto.internal_static_raftpb_HardState_descriptor;
+        return RaftProtos.internal_static_raftpb_HardState_descriptor;
     }
 
     protected FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return RaftProto.internal_static_raftpb_HardState_fieldAccessorTable
+        return RaftProtos.internal_static_raftpb_HardState_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
               HardState.class, Builder.class);
     }
@@ -4454,12 +4454,12 @@ public final class RaftProto {
         HardStateOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return RaftProto.internal_static_raftpb_HardState_descriptor;
+          return RaftProtos.internal_static_raftpb_HardState_descriptor;
       }
 
       protected FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return RaftProto.internal_static_raftpb_HardState_fieldAccessorTable
+          return RaftProtos.internal_static_raftpb_HardState_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
                 HardState.class, Builder.class);
       }
@@ -4492,7 +4492,7 @@ public final class RaftProto {
 
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return RaftProto.internal_static_raftpb_HardState_descriptor;
+          return RaftProtos.internal_static_raftpb_HardState_descriptor;
       }
 
       public HardState getDefaultInstanceForType() {
@@ -4855,12 +4855,12 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return RaftProto.internal_static_raftpb_ConfState_descriptor;
+        return RaftProtos.internal_static_raftpb_ConfState_descriptor;
     }
 
     protected FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return RaftProto.internal_static_raftpb_ConfState_fieldAccessorTable
+        return RaftProtos.internal_static_raftpb_ConfState_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
               ConfState.class, Builder.class);
     }
@@ -5115,12 +5115,12 @@ public final class RaftProto {
         ConfStateOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return RaftProto.internal_static_raftpb_ConfState_descriptor;
+          return RaftProtos.internal_static_raftpb_ConfState_descriptor;
       }
 
       protected FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return RaftProto.internal_static_raftpb_ConfState_fieldAccessorTable
+          return RaftProtos.internal_static_raftpb_ConfState_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
                 ConfState.class, Builder.class);
       }
@@ -5151,7 +5151,7 @@ public final class RaftProto {
 
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return RaftProto.internal_static_raftpb_ConfState_descriptor;
+          return RaftProtos.internal_static_raftpb_ConfState_descriptor;
       }
 
       public ConfState getDefaultInstanceForType() {
@@ -5561,12 +5561,12 @@ public final class RaftProto {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return RaftProto.internal_static_raftpb_ConfChange_descriptor;
+        return RaftProtos.internal_static_raftpb_ConfChange_descriptor;
     }
 
     protected FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return RaftProto.internal_static_raftpb_ConfChange_fieldAccessorTable
+        return RaftProtos.internal_static_raftpb_ConfChange_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
               ConfChange.class, Builder.class);
     }
@@ -5808,12 +5808,12 @@ public final class RaftProto {
         ConfChangeOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return RaftProto.internal_static_raftpb_ConfChange_descriptor;
+          return RaftProtos.internal_static_raftpb_ConfChange_descriptor;
       }
 
       protected FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return RaftProto.internal_static_raftpb_ConfChange_fieldAccessorTable
+          return RaftProtos.internal_static_raftpb_ConfChange_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
                 ConfChange.class, Builder.class);
       }
@@ -5848,7 +5848,7 @@ public final class RaftProto {
 
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return RaftProto.internal_static_raftpb_ConfChange_descriptor;
+          return RaftProtos.internal_static_raftpb_ConfChange_descriptor;
       }
 
       public ConfChange getDefaultInstanceForType() {

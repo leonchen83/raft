@@ -16,7 +16,7 @@
 
 package com.moilioncircle.raft.entity;
 
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 import com.moilioncircle.raft.util.Strings;
 
 import java.util.ArrayList;
@@ -33,11 +33,6 @@ public class ConfState {
     public ConfState() {
         this.nodes = new ArrayList<>();
         this.learners = new ArrayList<>();
-    }
-
-    public ConfState(List<Long> nodes, List<Long> learners) {
-        this.nodes = nodes;
-        this.learners = learners;
     }
 
     public List<Long> getNodes() {
@@ -61,14 +56,25 @@ public class ConfState {
         return Strings.buildEx(this);
     }
 
-    public static RaftProto.ConfState build(ConfState state) {
-        RaftProto.ConfState.Builder builder = RaftProto.ConfState.newBuilder();
-        builder.addAllNodes(state.nodes);
-        builder.addAllLearners(state.learners);
+    public static RaftProtos.ConfState build(ConfState state) {
+        RaftProtos.ConfState.Builder builder = RaftProtos.ConfState.newBuilder();
+        if (state.nodes != null) {
+            builder.addAllNodes(state.nodes);
+        }
+        if (state.learners != null) {
+            builder.addAllLearners(state.learners);
+        }
         return builder.build();
     }
 
-    public static ConfState valueOf(RaftProto.ConfState state) {
-        return new ConfState(state.getNodesList(), state.getLearnersList());
+    public static ConfState valueOf(RaftProtos.ConfState state) {
+        ConfState r = new ConfState();
+        if (state.getNodesList() != null) {
+            r.setNodes(state.getNodesList());
+        }
+        if (state.getLearnersList() != null) {
+            r.setLearners(state.getLearnersList());
+        }
+        return r;
     }
 }

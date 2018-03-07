@@ -25,6 +25,7 @@ import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.HardState;
 import com.moilioncircle.raft.entity.Message;
 import com.moilioncircle.raft.entity.Snapshot;
+import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
 
 import java.util.ArrayList;
@@ -119,9 +120,17 @@ public class RawNode {
             List<Entry> ents = new ArrayList<>();
             for (int i = 0; i < peers.size(); i++) {
                 Peer peer = peers.get(i);
-                ConfChange cc = new ConfChange(0, ConfChangeAddNode, peer.id, peer.context);
+                ConfChange cc = new ConfChange();
+                cc.setType(ConfChangeAddNode);
+                cc.setNodeID(peer.id);
+                cc.setContext(peer.context);
                 byte[] data = ConfChange.build(cc).toByteArray();
-                ents.add(new Entry(1, i + 1, EntryConfChange, data));
+                Entry ent = new Entry();
+                ent.setType(EntryConfChange);
+                ent.setTerm(1);
+                ent.setIndex(i + 1);
+                ent.setData(data);
+                ents.add(ent);
             }
 
             raft.raftLog.append(ents);
@@ -144,7 +153,7 @@ public class RawNode {
      * Tick advances the internal logical clock by a single tick.
      */
     public void tick() {
-        raft.tick.get();
+        raft.tick.tick();
     }
 
     /**
@@ -178,7 +187,9 @@ public class RawNode {
         msg.setType(MsgProp);
         msg.setFrom(raft.id);
         List<Entry> entries = new ArrayList<>();
-        entries.add(new Entry(0, 0, null, data));
+        Entry ent = new Entry();
+        ent.setData(data);
+        entries.add(ent);
         msg.setEntries(entries);
         raft.step(msg);
     }
@@ -191,7 +202,10 @@ public class RawNode {
         Message msg = new Message();
         msg.setType(MsgProp);
         List<Entry> entries = new ArrayList<>();
-        entries.add(new Entry(0, 0, EntryConfChange, data));
+        Entry ent = new Entry();
+        ent.setType(EntryConfChange);
+        ent.setData(data);
+        entries.add(ent);
         msg.setEntries(entries);
         raft.step(msg);
     }
@@ -201,7 +215,10 @@ public class RawNode {
      */
     public ConfState applyConfChange(ConfChange cc) {
         if (cc.getNodeID() == None) {
-            return new ConfState(raft.nodes(), raft.learnerNodes());
+            ConfState cs = new ConfState();
+            cs.setNodes(raft.nodes());
+            cs.setLearners(raft.learnerNodes()); ;
+            return cs;
         }
         switch (cc.getType()) {
             case ConfChangeAddNode:
@@ -217,7 +234,10 @@ public class RawNode {
             default:
                 throw new Errors.RaftException("unexpected conf type");
         }
-        return new ConfState(raft.nodes(), raft.learnerNodes());
+        ConfState cs = new ConfState();
+        cs.setNodes(raft.nodes());
+        cs.setLearners(raft.learnerNodes()); ;
+        return cs;
     }
 
     /**
@@ -240,7 +260,7 @@ public class RawNode {
      */
     public Ready Ready() {
         Ready rd = new Ready(raft, prevSoftSt, prevHardSt);
-        raft.msgs = null;
+        raft.msgs = Lists.of();
         return rd;
     }
 
@@ -327,7 +347,9 @@ public class RawNode {
         Message msg = new Message();
         msg.setType(MsgReadIndex);
         List<Entry> entries = new ArrayList<>();
-        entries.add(new Entry(0, 0, null, rctx));
+        Entry ent = new Entry();
+        ent.setData(rctx);
+        entries.add(ent);
         msg.setEntries(entries);
         raft.step(msg);
     }

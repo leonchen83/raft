@@ -3,6 +3,7 @@ package com.moilioncircle.raft;
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.util.Arrays;
+import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
@@ -23,7 +24,7 @@ public class LogUnstable {
     /**
      * all entries that have not yet been written to storage.
      */
-    public List<Entry> entries;
+    public List<Entry> entries = Lists.of();
 
     public long offset;
 
@@ -88,10 +89,35 @@ public class LogUnstable {
          * only update the unstable entries if term is matched with
          * an unstable entry.
          */
-        if (tuple.getV1().longValue() == t && i >= offset) {
+        if (tuple.getV1() == t && i >= offset) {
             entries = Arrays.slice(entries, (int) (i + 1 - offset), entries.size());
             offset = i + 1;
+            shrinkEntriesArray();
         }
+    }
+
+    /**
+     * shrinkEntriesArray discards the underlying array used by the entries slice
+     * if most of it isn't being used. This avoids holding references to a bunch of
+     * potentially large entries that aren't needed anymore. Simply clearing the
+     * entries wouldn't be safe because clients might still be using them.
+     */
+    public void shrinkEntriesArray() {
+        // We replace the array if we're using less than half of the space in
+        // it. This number is fairly arbitrary, chosen as an attempt to balance
+        // memory usage vs number of allocations. It could probably be improved
+        // with some focused tuning.
+
+        if (entries.size() == 0) {
+            entries = Lists.of();
+        }
+        // TODO
+        // final int lenMultiple = 2;
+        // else if (entries.size() * lenMultiple < entries.size())/* cap(u.entries) */ {
+        // List<Entry> newEntries = new ArrayList<>();
+        // newEntries.addAll(entries);
+        // entries = newEntries;
+        // }
     }
 
     public void stableSnapTo(long i) {
@@ -102,7 +128,7 @@ public class LogUnstable {
 
     public void restore(Snapshot s) {
         offset = s.getMetadata().getIndex() + 1;
-        entries = null;
+        entries = Lists.of();
         snapshot = s;
     }
 

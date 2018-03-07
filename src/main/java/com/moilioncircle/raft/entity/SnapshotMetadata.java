@@ -16,7 +16,7 @@
 
 package com.moilioncircle.raft.entity;
 
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 import com.moilioncircle.raft.util.Strings;
 
 /**
@@ -30,12 +30,6 @@ public class SnapshotMetadata {
 
     public SnapshotMetadata() {
         this.confState = new ConfState();
-    }
-
-    public SnapshotMetadata(ConfState confState, long index, long term) {
-        this.confState = confState;
-        this.index = index;
-        this.term = term;
     }
 
     public ConfState getConfState() {
@@ -67,15 +61,23 @@ public class SnapshotMetadata {
         return Strings.buildEx(this);
     }
 
-    public static RaftProto.SnapshotMetadata build(SnapshotMetadata meta) {
-        RaftProto.SnapshotMetadata.Builder builder = RaftProto.SnapshotMetadata.newBuilder();
-        builder.setConfState(ConfState.build(meta.getConfState()));
+    public static RaftProtos.SnapshotMetadata build(SnapshotMetadata meta) {
+        RaftProtos.SnapshotMetadata.Builder builder = RaftProtos.SnapshotMetadata.newBuilder();
+        if (meta.getConfState() != null) {
+            builder.setConfState(ConfState.build(meta.getConfState()));
+        }
         builder.setIndex(meta.getIndex());
         builder.setTerm(meta.getTerm());
         return builder.build();
     }
 
-    public static SnapshotMetadata valueOf(RaftProto.SnapshotMetadata meta) {
-        return new SnapshotMetadata(ConfState.valueOf(meta.getConfState()), meta.getIndex(), meta.getTerm());
+    public static SnapshotMetadata valueOf(RaftProtos.SnapshotMetadata meta) {
+        SnapshotMetadata r = new SnapshotMetadata();
+        if (meta.getConfState() != null) {
+            r.setConfState(ConfState.valueOf(meta.getConfState()));
+        }
+        r.setIndex(meta.getIndex());
+        r.setTerm(meta.getTerm());
+        return r;
     }
 }

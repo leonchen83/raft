@@ -16,7 +16,7 @@
 
 package com.moilioncircle.raft.entity;
 
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 import com.moilioncircle.raft.util.Strings;
 
 /**
@@ -29,12 +29,6 @@ public class HardState {
     private long commit;
 
     public HardState() {}
-
-    public HardState(long term, long vote, long commit) {
-        this.term = term;
-        this.vote = vote;
-        this.commit = commit;
-    }
 
     public long getTerm() {
         return term;
@@ -65,15 +59,19 @@ public class HardState {
         return Strings.buildEx(this);
     }
 
-    public static RaftProto.HardState build(HardState state) {
-        RaftProto.HardState.Builder builder = RaftProto.HardState.newBuilder();
+    public static RaftProtos.HardState build(HardState state) {
+        RaftProtos.HardState.Builder builder = RaftProtos.HardState.newBuilder();
         builder.setTerm(state.getTerm());
         builder.setVote(state.getVote());
         builder.setCommit(state.getCommit());
         return builder.build();
     }
 
-    public static HardState valueOf(RaftProto.HardState state) {
-        return new HardState(state.getTerm(), state.getVote(), state.getCommit());
+    public static HardState valueOf(RaftProtos.HardState state) {
+        HardState r = new HardState();
+        r.setTerm(state.getTerm());
+        r.setVote(state.getVote());
+        r.setCommit(state.getCommit());
+        return r;
     }
 }

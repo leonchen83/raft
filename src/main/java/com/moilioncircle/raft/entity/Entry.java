@@ -17,7 +17,7 @@
 package com.moilioncircle.raft.entity;
 
 import com.google.protobuf.ByteString;
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 import com.moilioncircle.raft.util.Strings;
 
 import java.util.ArrayList;
@@ -34,13 +34,6 @@ public class Entry {
     private byte[] data;
 
     public Entry() {}
-
-    public Entry(long term, long index, EntryType type, byte[] data) {
-        this.term = term;
-        this.index = index;
-        this.type = type;
-        this.data = data;
-    }
 
     public long getTerm() {
         return term;
@@ -79,32 +72,45 @@ public class Entry {
         return Strings.buildEx(this);
     }
 
-    public static RaftProto.Entry build(Entry entry) {
-        RaftProto.Entry.Builder builder = RaftProto.Entry.newBuilder();
+    public static RaftProtos.Entry build(Entry entry) {
+        RaftProtos.Entry.Builder builder = RaftProtos.Entry.newBuilder();
         builder.setTerm(entry.getTerm());
         builder.setIndex(entry.getIndex());
-        builder.setData(ByteString.copyFrom(entry.getData()));
-        builder.setType(EntryType.build(entry.getType()));
+        if (entry.getData() != null) {
+            builder.setData(ByteString.copyFrom(entry.getData()));
+        }
+        if (entry.getType() != null) {
+            builder.setType(EntryType.build(entry.getType()));
+        }
         return builder.build();
     }
 
-    public static List<RaftProto.Entry> build(List<Entry> entries) {
-        List<RaftProto.Entry> list = new ArrayList<>(entries.size());
+    public static List<RaftProtos.Entry> build(List<Entry> entries) {
+        List<RaftProtos.Entry> list = new ArrayList<>(entries.size());
         for (Entry entry : entries) {
             list.add(build(entry));
         }
         return list;
     }
 
-    public static List<Entry> valueOf(List<RaftProto.Entry> entries) {
+    public static List<Entry> valueOf(List<RaftProtos.Entry> entries) {
         List<Entry> list = new ArrayList<>(entries.size());
-        for (RaftProto.Entry entry : entries) {
+        for (RaftProtos.Entry entry : entries) {
             list.add(valueOf(entry));
         }
         return list;
     }
 
-    public static Entry valueOf(RaftProto.Entry entry) {
-        return new Entry(entry.getTerm(), entry.getIndex(), EntryType.valueOf(entry.getType()), entry.getData().toByteArray());
+    public static Entry valueOf(RaftProtos.Entry entry) {
+        Entry r = new Entry();
+        r.setTerm(entry.getTerm());
+        r.setIndex(r.getIndex());
+        if (entry.getType() != null) {
+            r.setType(EntryType.valueOf(entry.getType()));
+        }
+        if (!entry.getData().isEmpty()) {
+            r.setData(entry.getData().toByteArray());
+        }
+        return r;
     }
 }

@@ -17,7 +17,7 @@
 package com.moilioncircle.raft.entity;
 
 import com.google.protobuf.ByteString;
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 import com.moilioncircle.raft.util.Strings;
 
 /**
@@ -31,13 +31,6 @@ public class ConfChange {
     private byte[] context;
 
     public ConfChange() {}
-
-    public ConfChange(long id, ConfChangeType type, long nodeID, byte[] context) {
-        this.id = id;
-        this.type = type;
-        this.nodeID = nodeID;
-        this.context = context;
-    }
 
     public long getId() {
         return id;
@@ -76,16 +69,29 @@ public class ConfChange {
         return Strings.buildEx(this);
     }
 
-    public static RaftProto.ConfChange build(ConfChange change) {
-        RaftProto.ConfChange.Builder builder = RaftProto.ConfChange.newBuilder();
+    public static RaftProtos.ConfChange build(ConfChange change) {
+        RaftProtos.ConfChange.Builder builder = RaftProtos.ConfChange.newBuilder();
         builder.setId(change.getId());
-        builder.setType(ConfChangeType.build(change.getType()));
+        if (change.getType() != null) {
+            builder.setType(ConfChangeType.build(change.getType()));
+        }
         builder.setNodeID(change.getNodeID());
-        builder.setContext(ByteString.copyFrom(change.getContext()));
+        if (change.getContext() != null) {
+            builder.setContext(ByteString.copyFrom(change.getContext()));
+        }
         return builder.build();
     }
 
-    public static ConfChange valueOf(RaftProto.ConfChange change) {
-        return new ConfChange(change.getId(), ConfChangeType.valueOf(change.getType()), change.getNodeID(), change.getContext().toByteArray());
+    public static ConfChange valueOf(RaftProtos.ConfChange change) {
+        ConfChange r = new ConfChange();
+        r.setId(change.getId());
+        if (change.getType() != null) {
+            r.setType(ConfChangeType.valueOf(change.getType()));
+        }
+        r.setNodeID(change.getNodeID());
+        if (!change.getContext().isEmpty()) {
+            r.setContext(change.getContext().toByteArray());
+        }
+        return r;
     }
 }

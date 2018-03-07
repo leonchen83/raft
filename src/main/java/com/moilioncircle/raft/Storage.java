@@ -177,7 +177,10 @@ public interface Storage {
 
             this.snapshot = snap;
             this.ents = new ArrayList<>();
-            this.ents.add(new Entry(snap.getMetadata().getTerm(), snap.getMetadata().getIndex(), null, null));
+            Entry ent = new Entry();
+            ent.setTerm(snap.getMetadata().getTerm());
+            ent.setIndex(snap.getMetadata().getIndex());
+            this.ents.add(ent);
         }
 
         /**
@@ -202,7 +205,9 @@ public interface Storage {
             if (cs != null) {
                 meta.setConfState(cs);
             }
-            snapshot = new Snapshot(data, meta);
+            snapshot = new Snapshot();
+            snapshot.setData(data);
+            snapshot.setMetadata(meta);
             return snapshot;
         }
 
@@ -222,7 +227,10 @@ public interface Storage {
 
             int i = (int) (compactIndex - offset);
             List<Entry> ents = new ArrayList<>();
-            ents.add(new Entry(this.ents.get(i).getIndex(), this.ents.get(i).getTerm(), null, null));
+            Entry ent = new Entry();
+            ent.setIndex(this.ents.get(i).getIndex());
+            ent.setTerm(this.ents.get(i).getTerm());
+            ents.add(ent);
             ents.addAll(slice(this.ents, i + 1, this.ents.size()));
             this.ents = ents;
         }

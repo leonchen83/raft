@@ -3,7 +3,7 @@ syntax = "proto3";
 package raftpb;
 
 option java_package = "com.moilioncircle.raft.entity.proto";
-option java_outer_classname = "RaftProto";
+option java_outer_classname = "RaftProtos";
 
 enum EntryType {
     EntryNormal = 0;

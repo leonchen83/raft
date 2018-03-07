@@ -3,6 +3,7 @@ package com.moilioncircle.raft;
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.util.Arrays;
+import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
@@ -253,7 +254,7 @@ public class RaftLog {
 
     public List<Entry> entries(long i, long maxsize) {
         if (i > lastIndex()) {
-            return null;
+            return Lists.of();
         }
         return slice(i, lastIndex() + 1, maxsize);
     }

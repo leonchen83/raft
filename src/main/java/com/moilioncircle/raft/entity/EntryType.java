@@ -16,7 +16,7 @@
 
 package com.moilioncircle.raft.entity;
 
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 
 /**
  * @author Baoyi Chen
@@ -33,11 +33,13 @@ public enum EntryType {
         this.value = value;
     }
 
-    public static RaftProto.EntryType build(EntryType type) {
-        return RaftProto.EntryType.forNumber(type.value);
+    public static RaftProtos.EntryType build(EntryType type) {
+        if (type == null) return null;
+        return RaftProtos.EntryType.forNumber(type.value);
     }
 
-    public static EntryType valueOf(RaftProto.EntryType type) {
+    public static EntryType valueOf(RaftProtos.EntryType type) {
+        if (type == null) return null;
         switch (type.getNumber()) {
             case 0:
                 return EntryNormal;

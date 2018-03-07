@@ -17,7 +17,7 @@
 package com.moilioncircle.raft.entity;
 
 import com.google.protobuf.ByteString;
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 import com.moilioncircle.raft.util.Strings;
 
 /**
@@ -30,11 +30,6 @@ public class Snapshot {
 
     public Snapshot() {
         this.metadata = new SnapshotMetadata();
-    }
-
-    public Snapshot(byte[] data, SnapshotMetadata metadata) {
-        this.data = data;
-        this.metadata = metadata;
     }
 
     public byte[] getData() {
@@ -58,14 +53,25 @@ public class Snapshot {
         return Strings.buildEx(this);
     }
 
-    public static RaftProto.Snapshot build(Snapshot snap) {
-        RaftProto.Snapshot.Builder builder = RaftProto.Snapshot.newBuilder();
-        builder.setData(ByteString.copyFrom(snap.getData()));
-        builder.setMetadata(SnapshotMetadata.build(snap.getMetadata()));
+    public static RaftProtos.Snapshot build(Snapshot snap) {
+        RaftProtos.Snapshot.Builder builder = RaftProtos.Snapshot.newBuilder();
+        if (snap.getData() != null) {
+            builder.setData(ByteString.copyFrom(snap.getData()));
+        }
+        if (snap.getMetadata() != null) {
+            builder.setMetadata(SnapshotMetadata.build(snap.getMetadata()));
+        }
         return builder.build();
     }
 
-    public static Snapshot valueOf(RaftProto.Snapshot snap) {
-        return new Snapshot(snap.getData().toByteArray(), SnapshotMetadata.valueOf(snap.getMetadata()));
+    public static Snapshot valueOf(RaftProtos.Snapshot snap) {
+        Snapshot r = new Snapshot();
+        if (!snap.getData().isEmpty()) {
+            r.setData(snap.getData().toByteArray());
+        }
+        if (snap.getMetadata() != null) {
+            r.setMetadata(SnapshotMetadata.valueOf(snap.getMetadata()));
+        }
+        return r;
     }
 }

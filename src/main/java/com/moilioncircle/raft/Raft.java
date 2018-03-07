@@ -7,6 +7,9 @@ import com.moilioncircle.raft.entity.HardState;
 import com.moilioncircle.raft.entity.Message;
 import com.moilioncircle.raft.entity.MessageType;
 import com.moilioncircle.raft.entity.Snapshot;
+import com.moilioncircle.raft.glossary.Step;
+import com.moilioncircle.raft.glossary.Tick;
+import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.type.Tuple2;
 import org.slf4j.Logger;
@@ -21,12 +24,14 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
-import java.util.function.Supplier;
 
 import static com.moilioncircle.raft.Errors.ERR_PROPOSAL_DROPPED;
 import static com.moilioncircle.raft.Errors.ERR_SNAPSHOT_TEMPORARILY_UNAVAILABLE;
 import static com.moilioncircle.raft.Progress.ProgressState.Probe;
 import static com.moilioncircle.raft.Progress.ProgressState.Replicate;
+import static com.moilioncircle.raft.Raft.CampaignType.Election;
+import static com.moilioncircle.raft.Raft.CampaignType.PreElection;
+import static com.moilioncircle.raft.Raft.CampaignType.Transfer;
 import static com.moilioncircle.raft.Raft.StateRole.Candidate;
 import static com.moilioncircle.raft.Raft.StateRole.Follower;
 import static com.moilioncircle.raft.Raft.StateRole.Leader;
@@ -67,22 +72,47 @@ public class Raft {
         PreCandidate
     }
 
-    /**
-     * campaignPreElection represents the first phase of a normal election when
-     * Config.PreVote is true.
-     */
-    public static final String campaignPreElection = "CampaignPreElection";
+    public enum CampaignType {
 
-    /**
-     * campaignElection represents a normal (time-based) election (the second phase
-     * of the election when Config.PreVote is true).
-     */
-    public static final String campaignElection = "CampaignElection";
+        /**
+         * campaignPreElection represents the first phase of a normal election when
+         * Config.PreVote is true.
+         */
+        PreElection("CampaignPreElection".getBytes()),
 
-    /**
-     * campaignTransfer represents the type of leader transfer
-     */
-    public static final String campaignTransfer = "CampaignTransfer";
+        /**
+         * campaignElection represents a normal (time-based) election (the second phase
+         * of the election when Config.PreVote is true).
+         */
+        Election("CampaignElection".getBytes()),
+
+        /**
+         * campaignTransfer represents the type of leader transfer
+         */
+        Transfer("CampaignTransfer".getBytes());
+
+        byte[] value;
+
+        CampaignType(byte[] value) {
+            this.value = value;
+        }
+
+        public byte[] getValue() {
+            return value;
+        }
+
+        public static CampaignType valueOf(byte[] v) {
+            if (Arrays.equals(v, PreElection.value)) {
+                return PreElection;
+            } else if (Arrays.equals(v, Election.value)) {
+                return Election;
+            } else if (Arrays.equals(v, Transfer.value)) {
+                return Transfer;
+            } else {
+                throw new Errors.RaftException("invalid type:" + new String(v));
+            }
+        }
+    }
 
     public static final long None = 0;
     public static final long noLimit = Long.MAX_VALUE;
@@ -93,7 +123,7 @@ public class Raft {
 
     public long vote;
 
-    public List<ReadState> readStates;
+    public List<ReadState> readStates = Lists.of();
 
     /**
      * the log
@@ -114,7 +144,7 @@ public class Raft {
 
     public Map<Long, Boolean> votes;
 
-    public List<Message> msgs;
+    public List<Message> msgs = Lists.of();
 
     /**
      * the leader id
@@ -168,8 +198,8 @@ public class Raft {
 
     public boolean disableProposalForwarding;
 
-    public Supplier<Void> tick;
-    public BiFunction<Raft, Message, Void> step;
+    public Tick tick;
+    public Step step;
 
     public Raft(Config c) {
         c.validate();
@@ -247,7 +277,11 @@ public class Raft {
     public boolean hasLeader() { return lead != None; }
 
     public HardState hardState() {
-        return new HardState(term, vote, raftLog.committed);
+        HardState hs = new HardState();
+        hs.setTerm(term);
+        hs.setVote(vote);
+        hs.setCommit(raftLog.committed);
+        return hs;
     }
 
     public SoftState softState() {
@@ -508,7 +542,7 @@ public class Raft {
         maybeCommit();
     }
 
-    public Supplier<Void> tickElection = () -> {
+    public Tick tickElection = () -> {
         electionElapsed++;
 
         if (promotable() && pastElectionTimeout()) {
@@ -518,13 +552,12 @@ public class Raft {
             msg.setType(MsgHup);
             step(msg);
         }
-        return null;
     };
 
     /**
      * tickHeartbeat is run by leaders to send a MsgBeat after r.heartbeatTimeout.
      */
-    public Supplier<Void> tickHeartbeat = () -> {
+    public Tick tickHeartbeat = () -> {
         heartbeatElapsed++;
         electionElapsed++;
 
@@ -543,7 +576,7 @@ public class Raft {
         }
 
         if (state != Leader) {
-            return null;
+            return;
         }
 
         if (heartbeatElapsed >= heartbeatTimeout) {
@@ -553,7 +586,6 @@ public class Raft {
             msg.setType(MsgBeat);
             step(msg);
         }
-        return null;
     };
 
     public void becomeFollower(long term, long lead) {
@@ -629,10 +661,10 @@ public class Raft {
         }
     }
 
-    public void campaign(String t) {
+    public void campaign(CampaignType t) {
         long term = 0L;
         MessageType voteMsg = null;
-        if (t == campaignPreElection) {
+        if (t == PreElection) {
             becomePreCandidate();
             voteMsg = MsgPreVote;
             // PreVote RPCs are sent for the next term before we've incremented r.Term.
@@ -647,8 +679,8 @@ public class Raft {
              * We won the election after voting for ourselves (which must mean that
              * this is a single-node cluster). Advance to the next state.
              */
-            if (t == campaignPreElection) {
-                campaign(campaignElection);
+            if (t == PreElection) {
+                campaign(Election);
             } else {
                 becomeLeader();
             }
@@ -663,8 +695,8 @@ public class Raft {
                     id, raftLog.lastTerm(), raftLog.lastIndex(), voteMsg, id, this.term);
 
             byte[] ctx = null;
-            if (t == campaignTransfer) {
-                ctx = t.getBytes();
+            if (t == Transfer) {
+                ctx = t.getValue();
             }
             Message msg = new Message();
             msg.setTerm(term);
@@ -703,7 +735,7 @@ public class Raft {
             // local message
         } else if (m.getTerm() > this.term) {
             if (m.getType() == MsgVote || m.getType() == MsgPreVote) {
-                boolean force = Arrays.equals(m.getContext(), campaignTransfer.getBytes());
+                boolean force = CampaignType.valueOf(m.getContext()) == Transfer;
                 boolean inLease = checkQuorum && lead != None && electionElapsed < electionTimeout;
                 if (!force && inLease) {
                     // If a server receives a RequestVote request within the minimum election timeout
@@ -716,7 +748,7 @@ public class Raft {
 
             if (m.getType() == MsgPreVote) {
                 // Never change our term in response to a PreVote
-            } else if (m.getType() == MsgPreVoteResp && !m.isReject()) {
+            } else if (m.getType() == MsgPreVoteResp && !m.getReject()) {
                 /*
                  * We send pre-vote requests with a term in our future. If the
                  * pre-vote is granted, we will increment our term when we get a
@@ -789,9 +821,9 @@ public class Raft {
 
                     logger.info("{} is starting a new election at term {}", id, term);
                     if (preVote) {
-                        campaign(campaignPreElection);
+                        campaign(PreElection);
                     } else {
-                        campaign(campaignElection);
+                        campaign(Election);
                     }
                 } else {
                     logger.debug("{} ignoring MsgHup because already leader", id);
@@ -849,22 +881,22 @@ public class Raft {
                 }
                 break;
             default:
-                this.step.apply(this, m);
+                this.step.step(this, m);
         }
     }
 
-    public BiFunction<Raft, Message, Void> stepLeader = (r, m) -> {
+    public Step stepLeader = (r, m) -> {
         // These message types do not require any progress for m.From.
         switch (m.getType()) {
             case MsgBeat:
                 r.bcastHeartbeat();
-                return null;
+                return;
             case MsgCheckQuorum:
                 if (!r.checkQuorumActive()) {
                     logger.warn("{} stepped down to follower since quorum is not active", r.id);
                     r.becomeFollower(r.term, None);
                 }
-                return null;
+                return;
             case MsgProp:
                 if (m.getEntries().size() == 0) {
                     throw new Errors.RaftException(r.id + " stepped empty MsgProp");
@@ -900,12 +932,12 @@ public class Raft {
 
                 r.appendEntry(m.getEntries());
                 r.bcastAppend();
-                return null;
+                return;
             case MsgReadIndex:
                 if (r.quorum() > 1) {
                     if (r.raftLog.zeroTermOnErrCompacted(() -> r.raftLog.term(r.raftLog.committed)) != r.term) {
                         // Reject read only request when this leader has not committed any log entry at its term.
-                        return null;
+                        return;
                     }
 
                     /*
@@ -941,20 +973,20 @@ public class Raft {
                     r.readStates.add(rs);
                 }
 
-                return null;
+                return;
         }
 
         // All other message types require a progress for m.From (pr).
         Progress pr = r.getProgress(m.getFrom());
         if (pr == null) {
             logger.debug("{} no progress available for {}", r.id, m.getFrom());
-            return null;
+            return;
         }
         switch (m.getType()) {
             case MsgAppResp:
                 pr.recentActive = true;
 
-                if (m.isReject()) {
+                if (m.getReject()) {
                     logger.debug("{} received msgApp rejection(lastindex: {}) from {} for index {}",
                             r.id, m.getRejectHint(), m.getFrom(), m.getIndex());
                     if (pr.maybeDecrTo(m.getIndex(), m.getRejectHint())) {
@@ -989,7 +1021,7 @@ public class Raft {
                         }
                     }
                 }
-                return null;
+                return;
             case MsgHeartbeatResp:
                 pr.recentActive = true;
                 pr.resume();
@@ -1003,12 +1035,12 @@ public class Raft {
                 }
 
                 if (r.readOnly.option != Safe || m.getContext().length == 0) {
-                    return null;
+                    return;
                 }
 
                 int ackCount = r.readOnly.recvAck(m);
                 if (ackCount < r.quorum()) {
-                    return null;
+                    return;
                 }
 
                 List<ReadOnly.ReadIndexStatus> rss = r.readOnly.advance(m);
@@ -1028,12 +1060,12 @@ public class Raft {
                         r.send(msg);
                     }
                 }
-                return null;
+                return;
             case MsgSnapStatus:
                 if (pr.state != Progress.ProgressState.Snapshot) {
-                    return null;
+                    return;
                 }
-                if (!m.isReject()) {
+                if (!m.getReject()) {
                     pr.becomeProbe();
                     logger.debug("{} snapshot succeeded, resumed sending replication messages to {} [{}]", r.id, m.getFrom(), pr);
                 } else {
@@ -1047,18 +1079,18 @@ public class Raft {
                  * If snapshot failure, wait for a heartbeat interval before next try
                  */
                 pr.pause();
-                return null;
+                return;
             case MsgUnreachable:
                 // During optimistic replication, if the remote becomes unreachable, there is huge probability that a MsgApp is lost.
                 if (pr.state == Replicate) {
                     pr.becomeProbe();
                 }
                 logger.debug("{} failed to send message to {} because it is unreachable [{}]", r.id, m.getFrom(), pr);
-                return null;
+                return;
             case MsgTransferLeader:
                 if (pr.isLearner) {
                     logger.debug("{} is learner. Ignored transferring leadership", r.id);
-                    return null;
+                    return;
                 }
                 long leadTransferee = m.getFrom();
                 long lastLeadTransferee = r.leadTransferee;
@@ -1066,14 +1098,14 @@ public class Raft {
                     if (lastLeadTransferee == leadTransferee) {
                         logger.info("{} [term {}] transfer leadership to {} is in progress, ignores request to same node {}",
                                 r.id, r.term, leadTransferee, leadTransferee);
-                        return null;
+                        return;
                     }
                     r.abortLeaderTransfer();
                     logger.info("{} [term {}] abort previous transferring leadership to {}", r.id, r.term, lastLeadTransferee);
                 }
                 if (leadTransferee == r.id) {
                     logger.debug("{} is already leader. Ignored transferring leadership to self", r.id);
-                    return null;
+                    return;
                 }
                 // Transfer leadership to third party.
                 logger.info("{} [term {}] starts to transfer leadership to {}", r.id, r.term, leadTransferee);
@@ -1087,14 +1119,14 @@ public class Raft {
                     r.sendAppend(leadTransferee);
                 }
         }
-        return null;
+        return;
     };
 
     /**
      * stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
      * whether they respond to MsgVoteResp or MsgPreVoteResp.
      */
-    public BiFunction<Raft, Message, Void> stepCandidate = (r, m) -> {
+    public Step stepCandidate = (r, m) -> {
         /*
          * Only handle vote responses corresponding to our candidacy (while in
          * StateCandidate, we may get stale MsgPreVoteResp messages in this term from
@@ -1127,12 +1159,12 @@ public class Raft {
                 break;
             default:
                 if (m.getType() == myVoteRespType) {
-                    int gr = r.poll(m.getFrom(), m.getType(), !m.isReject());
+                    int gr = r.poll(m.getFrom(), m.getType(), !m.getReject());
                     logger.info("{} [quorum:{}] has received {} {} votes and {} vote rejections", r.id, r.quorum(), gr, m.getType(), r.votes.size() - gr);
                     int quorum = r.quorum();
                     if (quorum == gr) {
                         if (r.state == PreCandidate) {
-                            r.campaign(campaignElection);
+                            r.campaign(Election);
                         } else {
                             r.becomeLeader();
                             r.bcastAppend();
@@ -1145,10 +1177,9 @@ public class Raft {
                 }
 
         }
-        return null;
     };
 
-    public BiFunction<Raft, Message, Void> stepFollower = (r, m) -> {
+    public Step stepFollower = (r, m) -> {
         switch (m.getType()) {
             case MsgProp:
                 if (r.lead == None) {
@@ -1179,7 +1210,7 @@ public class Raft {
             case MsgTransferLeader:
                 if (r.lead == None) {
                     logger.info("{} no leader at term {}; dropping leader transfer msg", r.id, r.term);
-                    return null;
+                    return;
                 }
                 m.setTo(r.lead);
                 r.send(m);
@@ -1192,7 +1223,7 @@ public class Raft {
                      * know we are not recovering from a partition so there is no need for the
                      * extra round trip.
                      */
-                    r.campaign(campaignTransfer);
+                    r.campaign(Transfer);
                 } else {
                     logger.info("{} received MsgTimeoutNow from {} but is not promotable", r.id, m.getFrom());
                 }
@@ -1200,7 +1231,7 @@ public class Raft {
             case MsgReadIndex:
                 if (r.lead == None) {
                     logger.info("{} no leader at term {}; dropping index reading msg", r.id, r.term);
-                    return null;
+                    return;
                 }
                 m.setTo(r.lead);
                 r.send(m);
@@ -1208,14 +1239,13 @@ public class Raft {
             case MsgReadIndexResp:
                 if (m.getEntries().size() != 1) {
                     logger.error("{} invalid format of MsgReadIndexResp from {}, entries count: {}", r.id, m.getFrom(), m.getEntries().size());
-                    return null;
+                    return;
                 }
                 ReadState readState = new ReadState();
                 readState.index = m.getIndex();
                 readState.requestCtx = m.getEntries().get(0).getData();
                 r.readStates.add(readState);
         }
-        return null;
     };
 
     public void handleAppendEntries(Message m) {
@@ -1637,6 +1667,11 @@ public class Raft {
          * to the leader.
          */
         public boolean disableProposalForwarding;
+
+        public Config() {
+            this.peers = Lists.of();
+            this.learners = Lists.of();
+        }
 
         public void validate() {
             if (id == None) {

@@ -17,7 +17,7 @@
 package com.moilioncircle.raft.entity;
 
 import com.google.protobuf.ByteString;
-import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.entity.proto.RaftProtos;
 import com.moilioncircle.raft.util.Strings;
 
 import java.util.ArrayList;
@@ -44,21 +44,6 @@ public class Message {
     public Message() {
         this.entries = new ArrayList<>();
         this.snapshot = new Snapshot();
-    }
-
-    public Message(MessageType type, long to, long from, long term, long logTerm, long index, List<Entry> entries, long commit, Snapshot snapshot, boolean reject, long rejectHint, byte[] context) {
-        this.type = type;
-        this.to = to;
-        this.from = from;
-        this.term = term;
-        this.logTerm = logTerm;
-        this.index = index;
-        this.entries = entries;
-        this.commit = commit;
-        this.snapshot = snapshot;
-        this.reject = reject;
-        this.rejectHint = rejectHint;
-        this.context = context;
     }
 
     public MessageType getType() {
@@ -133,7 +118,7 @@ public class Message {
         this.snapshot = snapshot;
     }
 
-    public boolean isReject() {
+    public boolean getReject() {
         return reject;
     }
 
@@ -162,36 +147,53 @@ public class Message {
         return Strings.buildEx(this);
     }
 
-    public static RaftProto.Message build(Message message) {
-        RaftProto.Message.Builder builder = RaftProto.Message.newBuilder();
-        builder.setType(MessageType.build(message.getType()));
+    public static RaftProtos.Message build(Message message) {
+        RaftProtos.Message.Builder builder = RaftProtos.Message.newBuilder();
+        if (message.getType() != null) {
+            builder.setType(MessageType.build(message.getType()));
+        }
         builder.setTo(message.getTo());
         builder.setFrom(message.getFrom());
         builder.setTerm(message.getTerm());
         builder.setLogTerm(message.getLogTerm());
         builder.setIndex(message.getIndex());
-        builder.addAllEntries(Entry.build(message.getEntries()));
+        if (message.getEntries() != null) {
+            builder.addAllEntries(Entry.build(message.getEntries()));
+        }
         builder.setCommit(message.getCommit());
-        builder.setSnapshot(Snapshot.build(message.getSnapshot()));
-        builder.setReject(message.isReject());
+        if (message.getSnapshot() != null) {
+            builder.setSnapshot(Snapshot.build(message.getSnapshot()));
+        }
+        builder.setReject(message.getReject());
         builder.setRejectHint(message.getRejectHint());
-        builder.setContext(ByteString.copyFrom(message.getContext()));
+        if (message.getContext() != null) {
+            builder.setContext(ByteString.copyFrom(message.getContext()));
+        }
         return builder.build();
     }
 
-    public static Message valueOf(RaftProto.Message message) {
-        return new Message(
-                MessageType.valueOf(message.getType()),
-                message.getTo(),
-                message.getFrom(),
-                message.getTerm(),
-                message.getLogTerm(),
-                message.getIndex(),
-                Entry.valueOf(message.getEntriesList()),
-                message.getCommit(),
-                Snapshot.valueOf(message.getSnapshot()),
-                message.getReject(),
-                message.getRejectHint(),
-                message.getContext().toByteArray());
+    public static Message valueOf(RaftProtos.Message message) {
+        Message r = new Message();
+        if (message.getType() != null) {
+            r.setType(MessageType.valueOf(message.getType()));
+        }
+        r.setTo(message.getTo());
+        r.setFrom(message.getFrom());
+        r.setTerm(message.getTerm());
+        r.setLogTerm(message.getLogTerm());
+        r.setIndex(message.getIndex());
+        if (message.getEntriesList() != null) {
+            r.setEntries(Entry.valueOf(message.getEntriesList()));
+        }
+        r.setCommit(message.getCommit());
+        if (message.getSnapshot() != null) {
+            r.setSnapshot(Snapshot.valueOf(message.getSnapshot()));
+        }
+        r.setReject(message.getReject());
+        r.setRejectHint(message.getRejectHint());
+        if (!message.getContext().isEmpty()) {
+            r.setContext(message.getContext().toByteArray());
+        }
+        return r;
     }
 }
