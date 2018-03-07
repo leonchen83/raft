@@ -3,6 +3,7 @@ package com.moilioncircle.raft;
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.util.Arrays;
+import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
 import org.slf4j.Logger;
@@ -136,11 +137,16 @@ public class LogUnstable {
      */
     public void mustCheckOutOfBounds(long lo, long hi) {
         if (lo > hi) {
-            logger.warn("invalid unstable.slice {} > {}", lo, hi);
+            throw new Errors.RaftException("invalid unstable.slice " + lo + " > " + hi);
         }
         long upper = offset + entries.size();
         if (lo < offset || hi > upper) {
-            logger.warn("unstable.slice[{},{}) out of bound [{},{}]", lo, hi, offset, upper);
+            throw new Errors.RaftException("unstable.slice[" + lo + "," + hi + ") out of bound [" + offset + "," + upper + "]");
         }
+    }
+
+    @Override
+    public String toString() {
+        return Strings.buildEx(this);
     }
 }

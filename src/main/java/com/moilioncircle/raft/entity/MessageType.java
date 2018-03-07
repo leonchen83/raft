@@ -16,6 +16,7 @@
 
 package com.moilioncircle.raft.entity;
 
+import com.moilioncircle.raft.Errors;
 import com.moilioncircle.raft.entity.proto.RaftProto;
 
 /**
@@ -118,7 +119,7 @@ public enum MessageType {
             case MsgPreVote:
                 return MsgPreVoteResp;
             default:
-                throw new AssertionError("not a vote message: " + msgt);
+                throw new Errors.RaftException("not a vote message: " + msgt);
         }
     }
 }

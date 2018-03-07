@@ -17,6 +17,7 @@
 package com.moilioncircle.raft.entity;
 
 import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.util.Strings;
 
 /**
  * @author Leon Chen
@@ -63,11 +64,7 @@ public class SnapshotMetadata {
 
     @Override
     public String toString() {
-        return "SnapshotMetadata{" +
-                "confState=" + confState +
-                ", index=" + index +
-                ", term=" + term +
-                '}';
+        return Strings.buildEx(this);
     }
 
     public static RaftProto.SnapshotMetadata build(SnapshotMetadata meta) {

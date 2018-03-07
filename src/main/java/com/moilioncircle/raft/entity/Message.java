@@ -18,9 +18,9 @@ package com.moilioncircle.raft.entity;
 
 import com.google.protobuf.ByteString;
 import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.util.Strings;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -159,20 +159,7 @@ public class Message {
 
     @Override
     public String toString() {
-        return "Message{" +
-                "type=" + type +
-                ", to=" + to +
-                ", from=" + from +
-                ", term=" + term +
-                ", logTerm=" + logTerm +
-                ", index=" + index +
-                ", entries=" + entries +
-                ", commit=" + commit +
-                ", snapshot=" + snapshot +
-                ", reject=" + reject +
-                ", rejectHint=" + rejectHint +
-                ", context=" + Arrays.toString(context) +
-                '}';
+        return Strings.buildEx(this);
     }
 
     public static RaftProto.Message build(Message message) {

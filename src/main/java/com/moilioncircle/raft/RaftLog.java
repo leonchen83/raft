@@ -3,6 +3,7 @@ package com.moilioncircle.raft;
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.util.Arrays;
+import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
 import org.slf4j.Logger;
@@ -11,8 +12,10 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 import static com.moilioncircle.raft.Errors.ERR_COMPACTED;
+import static com.moilioncircle.raft.Errors.ERR_UNAVAILABLE;
 import static com.moilioncircle.raft.Raft.noLimit;
 import static com.moilioncircle.raft.Storage.limitSize;
 import static java.lang.Math.max;
@@ -48,12 +51,7 @@ public class RaftLog {
 
     @Override
     public String toString() {
-        return "RaftLog{" +
-                "storage=" + storage +
-                ", unstable=" + unstable +
-                ", committed=" + committed +
-                ", applied=" + applied +
-                '}';
+        return Strings.buildEx(this);
     }
 
     /**
@@ -80,8 +78,9 @@ public class RaftLog {
         if (matchTerm(index, logTerm)) {
             long lastnewi = index + ents.size();
             long ci = findConflict(ents);
-            if (ci == 0 || ci <= committed) {
-                logger.warn("entry {} conflict with committed entry [committed({})]", ci, committed);
+            if (ci == 0) {
+            } else if (ci <= committed) {
+                throw new Errors.RaftException("entry " + ci + " conflict with committed entry [committed(" + committed + ")]");
             } else {
                 long offset = index + 1;
                 append(Arrays.slice(ents, (int) (ci - offset), ents.size()));
@@ -98,7 +97,7 @@ public class RaftLog {
         }
         long after = ents.get(0).getIndex() - 1;
         if (after < committed) {
-            logger.warn("after({}) is out of range [committed({})]", after, committed);
+            throw new Errors.RaftException("after(" + after + ") is out of range [committed(" + committed + ")]");
         }
         unstable.truncateAndAppend(ents);
         return lastIndex();
@@ -122,7 +121,7 @@ public class RaftLog {
             if (!matchTerm(ne.getIndex(), ne.getTerm())) {
                 if (ne.getIndex() <= lastIndex()) {
                     logger.info("found conflict at index {} [existing term: {}, conflicting term: {}]",
-                            ne.getIndex(), zeroTermOnErrCompacted(term(ne.getIndex())), ne.getTerm());
+                            ne.getIndex(), zeroTermOnErrCompacted(() -> term(ne.getIndex())), ne.getTerm());
                 }
                 return ne.getIndex();
             }
@@ -145,11 +144,13 @@ public class RaftLog {
     public List<Entry> nextEnts() {
         long off = max(applied + 1, firstIndex());
         if (committed + 1 > off) {
-            List<Entry> ents = slice(off, committed + 1, noLimit);
-//                if err != nil {
-//                    l.logger.Panicf("unexpected error when getting unapplied entries (%v)", err)
-//                }
-            return ents;
+            try {
+                List<Entry> ents = slice(off, committed + 1, noLimit);
+                return ents;
+            } catch (Errors.RaftException e) {
+                logger.error("unexpected error when getting unapplied entries ({})", e.getMessage());
+                throw e;
+            }
         }
         return null;
     }
@@ -176,9 +177,6 @@ public class RaftLog {
             return tuple.getV1();
         }
         long index = storage.firstIndex();
-//            if err != nil {
-//                panic(err) // TODO(bdarnell)
-//            }
         return index;
     }
 
@@ -188,9 +186,6 @@ public class RaftLog {
             return tuple.getV1();
         }
         long index = storage.lastIndex();
-//            if err != nil {
-//                panic(err) // TODO(bdarnell)
-//            }
         return index;
     }
 
@@ -198,7 +193,7 @@ public class RaftLog {
         // never decrease commit
         if (committed < tocommit) {
             if (lastIndex() < tocommit) {
-                logger.warn("tocommit({}) is out of range [lastIndex({})]. Was the raft log corrupted, truncated, or lost?", tocommit, lastIndex());
+                throw new Errors.RaftException("tocommit(" + tocommit + ") is out of range [lastIndex(" + lastIndex() + ")]. Was the raft log corrupted, truncated, or lost?");
             }
             committed = tocommit;
         }
@@ -209,21 +204,27 @@ public class RaftLog {
             return;
         }
         if (committed < i || i < applied) {
-            logger.warn("applied({}) is out of range [prevApplied({}), committed({})]", i, applied, committed);
+            throw new Errors.RaftException("applied(" + i + ") is out of range [prevApplied(" + applied + "), committed(" + committed + ")]");
         }
         applied = i;
     }
 
-    public void stableTo(long i, long t) { unstable.stableTo(i, t); }
+    public void stableTo(long i, long t) {
+        unstable.stableTo(i, t);
+    }
 
-    public void stableSnapTo(long i) { unstable.stableSnapTo(i); }
+    public void stableSnapTo(long i) {
+        unstable.stableSnapTo(i);
+    }
 
     public long lastTerm() {
-        long t = term(lastIndex());
-//            if err != nil {
-//                l.logger.Panicf("unexpected error when getting the last term (%v)", err)
-//            }
-        return t;
+        try {
+            long t = term(lastIndex());
+            return t;
+        } catch (Errors.RaftException e) {
+            logger.error("unexpected error when getting the last term ({})", e.getMessage());
+            throw e;
+        }
     }
 
     public long term(long i) {
@@ -239,10 +240,15 @@ public class RaftLog {
             return tuple.getV1();
         }
 
-        return storage.term(i);
-//            if err == ErrCompacted || err == ErrUnavailable {
-//                return 0, err
-//            }
+        try {
+            return storage.term(i);
+        } catch (Errors.RaftException e) {
+            if (e == ERR_COMPACTED || e == ERR_UNAVAILABLE) {
+                return 0L;
+            } else {
+                throw e;
+            }
+        }
     }
 
     public List<Entry> entries(long i, long maxsize) {
@@ -256,13 +262,17 @@ public class RaftLog {
      * allEntries returns all entries in the log.
      */
     public List<Entry> allEntries() {
-        List<Entry> ents = entries(firstIndex(), noLimit);
-        return ents;
-//            if err == ErrCompacted { // try again if there was a racing compaction
-//                return l.allEntries()
-//            }
-//            // TODO (xiangli): handle error?
-//            panic(err)
+        try {
+            List<Entry> ents = entries(firstIndex(), noLimit);
+            return ents;
+        } catch (Errors.RaftException e) {
+            if (e == ERR_COMPACTED) {
+                // try again if there was a racing compaction
+                return allEntries();
+            } else {
+                throw e;
+            }
+        }
     }
 
     /**
@@ -278,15 +288,16 @@ public class RaftLog {
     }
 
     public boolean matchTerm(long i, long term) {
-        long t = term(i);
-//            if err != nil {
-//                return false
-//            }
-        return t == term;
+        try {
+            long t = term(i);
+            return t == term;
+        } catch (Errors.RaftException e) {
+            return false;
+        }
     }
 
     public boolean maybeCommit(long maxIndex, long term) {
-        if (maxIndex > committed && zeroTermOnErrCompacted(term(maxIndex)) == term) {
+        if (maxIndex > committed && zeroTermOnErrCompacted(() -> term(maxIndex)) == term) {
             commitTo(maxIndex);
             return true;
         }
@@ -304,28 +315,28 @@ public class RaftLog {
      */
     public List<Entry> slice(long lo, long hi, long maxSize) {
         mustCheckOutOfBounds(lo, hi);
-//            if err != nil {
-//                return nil, err
-//            }
         if (lo == hi) {
             return null;
         }
         List<Entry> ents = new ArrayList<>();
         if (lo < unstable.offset) {
-            List<Entry> storedEnts = storage.entries(lo, min(hi, unstable.offset), maxSize);
-//                if err == ErrCompacted {
-//                    return nil, err
-//                } else if err == ErrUnavailable {
-//                    l.logger.Panicf("entries[%d:%d) is unavailable from storage", lo, min(hi, l.unstable.offset))
-//                } else if err != nil {
-//                    panic(err) // TODO(bdarnell)
-//                }
-
-            // check if ents has reached the size limitation
-            if (storedEnts.size() < min(hi, unstable.offset) - lo) {
-                return storedEnts;
+            try {
+                List<Entry> storedEnts = storage.entries(lo, min(hi, unstable.offset), maxSize);
+                // check if ents has reached the size limitation
+                if (storedEnts.size() < min(hi, unstable.offset) - lo) {
+                    return storedEnts;
+                }
+                ents = storedEnts;
+            } catch (Errors.RaftException e) {
+                if (e == ERR_COMPACTED) {
+                    throw e; // TODO return nil, err
+                } else if (e == ERR_UNAVAILABLE) {
+                    logger.error("entries[" + lo + ":" + min(hi, unstable.offset) + ") is unavailable from storage");
+                    throw e;
+                } else {
+                    throw e;
+                }
             }
-            ents = storedEnts;
         }
         if (hi > unstable.offset) {
             List<Entry> unstable = this.unstable.slice(max(lo, this.unstable.offset), hi);
@@ -343,7 +354,7 @@ public class RaftLog {
      */
     public void mustCheckOutOfBounds(long lo, long hi) {
         if (lo > hi) {
-            logger.warn("invalid slice {} > {}", lo, hi);
+            throw new Errors.RaftException("invalid slice " + lo + " > " + hi);
         }
         long fi = firstIndex();
         if (lo < fi) {
@@ -352,19 +363,18 @@ public class RaftLog {
 
         long length = lastIndex() + 1 - fi;
         if (lo < fi || hi > fi + length) {
-            logger.warn("slice[{},{}) out of bound [{},{}]", lo, hi, fi, lastIndex());
+            throw new Errors.RaftException("slice[" + lo + "," + hi + ") out of bound [" + fi + "," + lastIndex() + "]");
         }
     }
 
-    public long zeroTermOnErrCompacted(long t) {
-        return t;
-//            if err == nil {
-//                return t
-//            }
-//            if err == ErrCompacted {
-//                return 0
-//            }
-//            logger.warn("unexpected error");
-//            return 0L;
+    public long zeroTermOnErrCompacted(Supplier<Long> t) {
+        try {
+            return t.get();
+        } catch (Errors.RaftException e) {
+            if (e == ERR_COMPACTED) {
+                return 0L;
+            }
+            throw new Errors.RaftException("unexpected error", e);
+        }
     }
 }

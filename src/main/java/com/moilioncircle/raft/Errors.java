@@ -96,7 +96,7 @@ public class Errors {
         }
     }
 
-    public static class RaftConfigException extends RuntimeException {
+    public static class RaftConfigException extends RaftException {
 
         public RaftConfigException() {
             super();

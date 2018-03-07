@@ -1,11 +1,11 @@
 package com.moilioncircle.raft;
 
 import com.moilioncircle.raft.entity.Message;
+import com.moilioncircle.raft.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,6 +97,11 @@ public class ReadOnly {
         return readIndexQueue.get(readIndexQueue.size() - 1);
     }
 
+    @Override
+    public String toString() {
+        return Strings.buildEx(this);
+    }
+
     /**
      * ReadState provides state for read only query.
      * It's caller's responsibility to call ReadIndex first before getting
@@ -110,10 +115,7 @@ public class ReadOnly {
 
         @Override
         public String toString() {
-            return "ReadState{" +
-                    "index=" + index +
-                    ", requestCtx=" + Arrays.toString(requestCtx) +
-                    '}';
+            return Strings.buildEx(this);
         }
     }
 
@@ -130,11 +132,7 @@ public class ReadOnly {
 
         @Override
         public String toString() {
-            return "ReadIndexStatus{" +
-                    "req=" + req +
-                    ", index=" + index +
-                    ", acks=" + acks +
-                    '}';
+            return Strings.buildEx(this);
         }
     }
 

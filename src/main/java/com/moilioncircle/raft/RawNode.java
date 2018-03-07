@@ -25,6 +25,7 @@ import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.HardState;
 import com.moilioncircle.raft.entity.Message;
 import com.moilioncircle.raft.entity.Snapshot;
+import com.moilioncircle.raft.util.Strings;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -214,7 +215,7 @@ public class RawNode {
                 break;
             case ConfChangeUpdateNode:
             default:
-                throw new AssertionError("unexpected conf type");
+                throw new Errors.RaftException("unexpected conf type");
         }
         return new ConfState(raft.nodes(), raft.learnerNodes());
     }
@@ -329,6 +330,11 @@ public class RawNode {
         entries.add(new Entry(0, 0, null, rctx));
         msg.setEntries(entries);
         raft.step(msg);
+    }
+
+    @Override
+    public String toString() {
+        return Strings.buildEx(this);
     }
 
     /**
@@ -451,10 +457,20 @@ public class RawNode {
         public static boolean isEmptySnap(Snapshot sp) {
             return sp.getMetadata().getIndex() == 0;
         }
+
+        @Override
+        public String toString() {
+            return Strings.buildEx(this);
+        }
     }
 
     public static class Peer {
         public long id;
         public byte[] context;
+
+        @Override
+        public String toString() {
+            return Strings.buildEx(this);
+        }
     }
 }

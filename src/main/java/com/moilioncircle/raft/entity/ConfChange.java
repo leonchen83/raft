@@ -18,8 +18,7 @@ package com.moilioncircle.raft.entity;
 
 import com.google.protobuf.ByteString;
 import com.moilioncircle.raft.entity.proto.RaftProto;
-
-import java.util.Arrays;
+import com.moilioncircle.raft.util.Strings;
 
 /**
  * @author Leon Chen
@@ -74,12 +73,7 @@ public class ConfChange {
 
     @Override
     public String toString() {
-        return "ConfChange{" +
-                "id=" + id +
-                ", type=" + type +
-                ", nodeID=" + nodeID +
-                ", context=" + Arrays.toString(context) +
-                '}';
+        return Strings.buildEx(this);
     }
 
     public static RaftProto.ConfChange build(ConfChange change) {

@@ -17,6 +17,7 @@
 package com.moilioncircle.raft.entity;
 
 import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.util.Strings;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,10 +58,7 @@ public class ConfState {
 
     @Override
     public String toString() {
-        return "ConfState{" +
-                "nodes=" + nodes +
-                ", learners=" + learners +
-                '}';
+        return Strings.buildEx(this);
     }
 
     public static RaftProto.ConfState build(ConfState state) {

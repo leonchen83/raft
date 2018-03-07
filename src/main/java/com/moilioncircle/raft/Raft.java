@@ -7,6 +7,7 @@ import com.moilioncircle.raft.entity.HardState;
 import com.moilioncircle.raft.entity.Message;
 import com.moilioncircle.raft.entity.MessageType;
 import com.moilioncircle.raft.entity.Snapshot;
+import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.type.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -350,7 +351,7 @@ public class Raft {
                 } else if (pr.state == Probe) {
                     pr.pause();
                 } else {
-                    logger.warn("{} is sending append in unhandled state {}", id, pr.state);
+                    throw new Errors.RaftException(id + " is sending append in unhandled state " + pr.state);
                 }
             }
             send(m);
@@ -604,23 +605,28 @@ public class Raft {
         this.tick = tickHeartbeat;
         this.lead = id;
         this.state = Leader;
-        List<Entry> ents = raftLog.entries(raftLog.committed + 1, noLimit);
+        try {
+            List<Entry> ents = raftLog.entries(raftLog.committed + 1, noLimit);
 
-        /*
-         * Conservatively set the pendingConfIndex to the last index in the
-         * log. There may or may not be a pending config change, but it's
-         * safe to delay any future proposals until we commit all our
-         * pending log entries, and scanning the entire tail of the log
-         * could be expensive.
-         */
-        if (ents.size() > 0) {
-            pendingConfIndex = ents.get(ents.size() - 1).getIndex();
+            /*
+             * Conservatively set the pendingConfIndex to the last index in the
+             * log. There may or may not be a pending config change, but it's
+             * safe to delay any future proposals until we commit all our
+             * pending log entries, and scanning the entire tail of the log
+             * could be expensive.
+             */
+            if (ents.size() > 0) {
+                pendingConfIndex = ents.get(ents.size() - 1).getIndex();
+            }
+
+            List<Entry> entries = new ArrayList<>();
+            entries.add(new Entry());
+            appendEntry(entries);
+            logger.info("{} became leader at term {}", id, term);
+        } catch (Errors.RaftException e) {
+            logger.error("unexpected error getting uncommitted entries ({})", e.getMessage());
+            throw e;
         }
-
-        List<Entry> entries = new ArrayList<>();
-        entries.add(new Entry());
-        appendEntry(entries);
-        logger.info("{} became leader at term {}", id, term);
     }
 
     public void campaign(String t) {
@@ -861,7 +867,7 @@ public class Raft {
                 return null;
             case MsgProp:
                 if (m.getEntries().size() == 0) {
-                    logger.warn("{} stepped empty MsgProp", r.id);
+                    throw new Errors.RaftException(r.id + " stepped empty MsgProp");
                 }
                 if (r.prs.containsKey(r.id)) {
                     /*
@@ -897,7 +903,7 @@ public class Raft {
                 return null;
             case MsgReadIndex:
                 if (r.quorum() > 1) {
-                    if (r.raftLog.zeroTermOnErrCompacted(r.raftLog.term(r.raftLog.committed)) != r.term) {
+                    if (r.raftLog.zeroTermOnErrCompacted(() -> r.raftLog.term(r.raftLog.committed)) != r.term) {
                         // Reject read only request when this leader has not committed any log entry at its term.
                         return null;
                     }
@@ -1233,7 +1239,7 @@ public class Raft {
             send(msg);
         } else {
             logger.debug("{} [logterm: {}, index: {}] rejected msgApp [logterm: {}, index: {}] from {}",
-                    id, raftLog.zeroTermOnErrCompacted(raftLog.term(m.getIndex())), m.getIndex(), m.getLogTerm(), m.getIndex(), m.getFrom());
+                    id, raftLog.zeroTermOnErrCompacted(() -> raftLog.term(m.getIndex())), m.getIndex(), m.getLogTerm(), m.getIndex(), m.getFrom());
             Message msg = new Message();
             msg.setTo(m.getFrom());
             msg.setType(MsgAppResp);
@@ -1425,7 +1431,7 @@ public class Raft {
 
     public void loadState(HardState state) {
         if (state.getCommit() < raftLog.committed || state.getCommit() > raftLog.lastIndex()) {
-            logger.warn("{} state.commit {} is out of range [{}, {}]", id, state.getCommit(), raftLog.committed, raftLog.lastIndex());
+            throw new Errors.RaftException(id + " state.commit " + state.getCommit() + " is out of range [" + raftLog.committed + ", " + raftLog.lastIndex() + "]");
         }
         raftLog.committed = state.getCommit();
         this.term = state.getTerm();
@@ -1492,6 +1498,11 @@ public class Raft {
         return n;
     }
 
+    @Override
+    public String toString() {
+        return Strings.buildEx(this);
+    }
+
     public static class SoftState {
 
         /**
@@ -1503,10 +1514,7 @@ public class Raft {
 
         @Override
         public String toString() {
-            return "SoftState{" +
-                    "lead=" + lead +
-                    ", raftState=" + raftState +
-                    '}';
+            return Strings.buildEx(this);
         }
 
         public boolean equal(SoftState b) {
@@ -1654,6 +1662,11 @@ public class Raft {
             if (readOnlyOption == LeaseBased && !checkQuorum) {
                 throw new Errors.RaftConfigException("CheckQuorum must be enabled when ReadOnlyOption is LeaseBased");
             }
+        }
+
+        @Override
+        public String toString() {
+            return Strings.buildEx(this);
         }
     }
 }

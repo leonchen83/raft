@@ -18,8 +18,7 @@ package com.moilioncircle.raft.entity;
 
 import com.google.protobuf.ByteString;
 import com.moilioncircle.raft.entity.proto.RaftProto;
-
-import java.util.Arrays;
+import com.moilioncircle.raft.util.Strings;
 
 /**
  * @author Leon Chen
@@ -56,10 +55,7 @@ public class Snapshot {
 
     @Override
     public String toString() {
-        return "Snapshot{" +
-                "data=" + Arrays.toString(data) +
-                ", metadata=" + metadata +
-                '}';
+        return Strings.buildEx(this);
     }
 
     public static RaftProto.Snapshot build(Snapshot snap) {

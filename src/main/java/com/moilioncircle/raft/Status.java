@@ -2,6 +2,7 @@ package com.moilioncircle.raft;
 
 import com.moilioncircle.raft.Raft.SoftState;
 import com.moilioncircle.raft.entity.HardState;
+import com.moilioncircle.raft.util.Strings;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -47,13 +48,6 @@ public class Status {
 
     @Override
     public String toString() {
-        return "Status{" +
-                "id=" + id +
-                ", applied=" + applied +
-                ", hardState=" + hardState +
-                ", softState=" + softState +
-                ", leadTransferee=" + leadTransferee +
-                ", progress=" + progress +
-                '}';
+        return Strings.buildEx(this);
     }
 }

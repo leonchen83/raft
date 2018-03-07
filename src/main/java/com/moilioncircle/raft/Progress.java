@@ -1,9 +1,8 @@
 package com.moilioncircle.raft;
 
+import com.moilioncircle.raft.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Arrays;
 
 import static com.moilioncircle.raft.Progress.ProgressState.Probe;
 import static com.moilioncircle.raft.Progress.ProgressState.Replicate;
@@ -189,7 +188,7 @@ public class Progress {
         } else if (state == Snapshot) {
             return true;
         } else {
-            throw new AssertionError("unexpected state");
+            throw new Errors.RaftException("unexpected state");
         }
     }
 
@@ -207,16 +206,7 @@ public class Progress {
 
     @Override
     public String toString() {
-        return "Progress{" +
-                "match=" + match +
-                ", next=" + next +
-                ", state=" + state +
-                ", paused=" + paused +
-                ", pendingSnapshot=" + pendingSnapshot +
-                ", recentActive=" + recentActive +
-                ", ins=" + ins +
-                ", isLearner=" + isLearner +
-                '}';
+        return Strings.buildEx(this);
     }
 
     public static class Inflights {
@@ -250,7 +240,7 @@ public class Progress {
          */
         public void add(long inflight) {
             if (full()) {
-                logger.warn("cannot add into a full inflights");
+                throw new Errors.RaftException("cannot add into a full inflights");
             }
             int next = start + count;
             int size = this.size;
@@ -335,12 +325,7 @@ public class Progress {
 
         @Override
         public String toString() {
-            return "Inflights{" +
-                    "start=" + start +
-                    ", count=" + count +
-                    ", size=" + size +
-                    ", buffer=" + Arrays.toString(buffer) +
-                    '}';
+            return Strings.buildEx(this);
         }
     }
 }

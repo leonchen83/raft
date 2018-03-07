@@ -17,6 +17,7 @@
 package com.moilioncircle.raft.entity;
 
 import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.util.Strings;
 
 /**
  * @author Leon Chen
@@ -61,11 +62,7 @@ public class HardState {
 
     @Override
     public String toString() {
-        return "HardState{" +
-                "term=" + term +
-                ", vote=" + vote +
-                ", commit=" + commit +
-                '}';
+        return Strings.buildEx(this);
     }
 
     public static RaftProto.HardState build(HardState state) {

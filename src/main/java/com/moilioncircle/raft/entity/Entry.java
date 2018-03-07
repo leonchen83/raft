@@ -18,9 +18,9 @@ package com.moilioncircle.raft.entity;
 
 import com.google.protobuf.ByteString;
 import com.moilioncircle.raft.entity.proto.RaftProto;
+import com.moilioncircle.raft.util.Strings;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -76,12 +76,7 @@ public class Entry {
 
     @Override
     public String toString() {
-        return "Entry{" +
-                "term=" + term +
-                ", index=" + index +
-                ", type=" + type +
-                ", data=" + Arrays.toString(data) +
-                '}';
+        return Strings.buildEx(this);
     }
 
     public static RaftProto.Entry build(Entry entry) {

@@ -5,6 +5,7 @@ import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.HardState;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.entity.SnapshotMetadata;
+import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
 import org.slf4j.Logger;
@@ -124,7 +125,7 @@ public interface Storage {
                 throw ERR_COMPACTED;
             }
             if (hi > lastIndex() + 1) {
-                logger.warn("entries' hi{} is out of bound lastindex{}", hi, lastIndex());
+                throw new Errors.RaftException("entries' hi " + hi + " is out of bound lastindex " + lastIndex());
             }
             // only contains dummy entries.
             if (ents.size() == 1) {
@@ -192,7 +193,7 @@ public interface Storage {
 
             long offset = ents.get(0).getIndex();
             if (i > lastIndex()) {
-                logger.warn("snapshot {} is out of bound lastindex({})", i, lastIndex());
+                throw new Errors.RaftException("snapshot " + i + " is out of bound lastindex(" + lastIndex() + ")");
             }
 
             SnapshotMetadata meta = new SnapshotMetadata();
@@ -216,7 +217,7 @@ public interface Storage {
                 throw ERR_COMPACTED;
             }
             if (compactIndex > lastIndex()) {
-                logger.warn("compact {} is out of bound lastindex({})", compactIndex, lastIndex());
+                throw new Errors.RaftException("compact " + compactIndex + " is out of bound lastindex(" + lastIndex() + ")");
             }
 
             int i = (int) (compactIndex - offset);
@@ -254,8 +255,13 @@ public interface Storage {
             } else if (ents.size() == offset) {
                 ents.addAll(entries);
             } else {
-                logger.warn("missing log entry [last: {}, append at: {}]", lastIndex(), entries.get(0).getIndex());
+                throw new Errors.RaftException("missing log entry [last: " + lastIndex() + ", append at: " + entries.get(0).getIndex() + "]");
             }
+        }
+
+        @Override
+        public String toString() {
+            return Strings.buildEx(this);
         }
     }
 }
