@@ -10,20 +10,18 @@ import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.glossary.Step;
 import com.moilioncircle.raft.glossary.Tick;
 import com.moilioncircle.raft.util.Lists;
+import com.moilioncircle.raft.util.Maps;
 import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.type.Tuple2;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.moilioncircle.raft.Errors.ERR_PROPOSAL_DROPPED;
 import static com.moilioncircle.raft.Errors.ERR_SNAPSHOT_TEMPORARILY_UNAVAILABLE;
@@ -132,17 +130,17 @@ public class Raft {
 
     public int maxInflight;
     public long maxMsgSize;
-    public Map<Long, Progress> prs;
-    public Map<Long, Progress> learnerPrs;
+    public Map<Long, Progress> prs = Maps.of();
+    public Map<Long, Progress> learnerPrs = Maps.of();
 
-    public StateRole state;
+    public StateRole state = Follower;
 
     /**
      * isLearner is true if the local raft node is a learner.
      */
     public boolean isLearner;
 
-    public Map<Long, Boolean> votes;
+    public Map<Long, Boolean> votes = Maps.of();
 
     public List<Message> msgs = Lists.of();
 
@@ -209,8 +207,8 @@ public class Raft {
         ConfState cs = tuple.getV2();
         List<Long> peers = c.peers;
         List<Long> learners = c.learners;
-        if (cs.getNodes().size() > 0 || cs.getLearners().size() > 0) {
-            if (peers.size() > 0 || learners.size() > 0) {
+        if (Lists.size(cs.getNodes()) > 0 || Lists.size(cs.getLearners()) > 0) {
+            if (Lists.size(peers) > 0 || Lists.size(learners) > 0) {
                 /*
                  * TODO(bdarnell): the peers argument is always nil except in
                  * tests; the argument should be removed and these tests should be
@@ -227,8 +225,6 @@ public class Raft {
         this.raftLog = raftlog;
         this.maxMsgSize = c.maxSizePerMsg;
         this.maxInflight = c.maxInflightMsgs;
-        this.prs = new HashMap<>();
-        this.learnerPrs = new HashMap<>();
         this.electionTimeout = c.electionTick;
         this.heartbeatTimeout = c.heartbeatTick;
         this.checkQuorum = c.checkQuorum;
@@ -265,16 +261,18 @@ public class Raft {
         }
         becomeFollower(term, None);
 
-        List<String> nodesStrs = new ArrayList<>();
+        List<String> nodesStrs = Lists.of();
         for (Long n : nodes()) {
             nodesStrs.add(String.valueOf(n));
         }
 
         logger.info("newRaft {} [peers: [{}], term: {}, commit: {}, applied: {}, lastindex: {}, lastterm: {}]",
-                id, nodesStrs, term, raftLog.committed, raftLog.applied, raftLog.lastIndex(), raftLog.lastTerm());
+            id, nodesStrs, term, raftLog.committed, raftLog.applied, raftLog.lastIndex(), raftLog.lastTerm());
     }
 
-    public boolean hasLeader() { return lead != None; }
+    public boolean hasLeader() {
+        return lead != None;
+    }
 
     public HardState hardState() {
         HardState hs = new HardState();
@@ -291,10 +289,12 @@ public class Raft {
         return soft;
     }
 
-    public int quorum() { return prs.size() / 2 + 1; }
+    public int quorum() {
+        return Maps.size(prs) / 2 + 1;
+    }
 
     public List<Long> nodes() {
-        List<Long> nodes = new ArrayList<>(prs.size());
+        List<Long> nodes = Lists.of();
         for (Map.Entry<Long, Progress> entry : prs.entrySet()) {
             nodes.add(entry.getKey());
         }
@@ -303,7 +303,7 @@ public class Raft {
     }
 
     public List<Long> learnerNodes() {
-        List<Long> nodes = new ArrayList<>(learnerPrs.size());
+        List<Long> nodes = Lists.of();
         for (Map.Entry<Long, Progress> entry : learnerPrs.entrySet()) {
             nodes.add(entry.getKey());
         }
@@ -353,7 +353,8 @@ public class Raft {
 
     public Progress getProgress(long id) {
         Progress pr = prs.get(id);
-        if (pr != null) return pr;
+        if (pr != null)
+            return pr;
         return learnerPrs.get(id);
     }
 
@@ -376,7 +377,7 @@ public class Raft {
             m.setLogTerm(term);
             m.setEntries(ents);
             m.setCommit(raftLog.committed);
-            int n = m.getEntries().size();
+            int n = Lists.size(m.getEntries());
             if (n != 0) {
                 if (pr.state == Replicate) {
                     long last = m.getEntries().get(n - 1).getIndex();
@@ -405,7 +406,7 @@ public class Raft {
                 long sindex = snapshot.getMetadata().getIndex();
                 long sterm = snapshot.getMetadata().getTerm();
                 logger.debug("{} [firstindex: {}, commit: {}] sent snapshot[index: {}, term: {}] to {} [{}]",
-                        id, raftLog.firstIndex(), raftLog.committed, sindex, sterm, to, pr);
+                    id, raftLog.firstIndex(), raftLog.committed, sindex, sterm, to, pr);
                 pr.becomeSnapshot(sindex);
                 logger.debug("{} paused sending replication messages to {} [{}]", id, to, pr);
             } catch (Errors.RaftException e1) {
@@ -468,7 +469,8 @@ public class Raft {
      */
     public void bcastHeartbeat() {
         String lastCtx = readOnly.lastPendingRequestCtx();
-        if (lastCtx.length() == 0) {
+        if (Strings.isEmpty(lastCtx)) {
+            // TODO
             bcastHeartbeatWithCtx(null);
         } else {
             bcastHeartbeatWithCtx(lastCtx.getBytes());
@@ -492,7 +494,7 @@ public class Raft {
      */
     public boolean maybeCommit() {
         // TODO(bmizerany): optimize.. Currently naive
-        List<Long> mis = new ArrayList<>(prs.size());
+        List<Long> mis = Lists.of();
         for (Map.Entry<Long, Progress> entry : prs.entrySet()) {
             mis.add(entry.getValue().match);
         }
@@ -515,7 +517,7 @@ public class Raft {
 
         abortLeaderTransfer();
 
-        this.votes = new HashMap<>();
+        this.votes = Maps.of();
         forEachProgress((id, pr) -> {
             pr.next = raftLog.lastIndex() + 1;
             pr.ins = new Progress.Inflights(maxInflight);
@@ -531,7 +533,7 @@ public class Raft {
 
     public void appendEntry(List<Entry> es) {
         long li = raftLog.lastIndex();
-        for (int i = 0; i < es.size(); i++) {
+        for (int i = 0; i < Lists.size(es); i++) {
             es.get(i).setTerm(term);
             es.get(i).setIndex(li + 1 + i);
         }
@@ -621,7 +623,7 @@ public class Raft {
          * r.Term or change r.Vote.
          */
         this.step = stepCandidate;
-        this.votes = new HashMap<>();
+        this.votes = Maps.of();
         this.tick = tickElection;
         this.state = PreCandidate;
         logger.info("{} became pre-candidate at term {}", id, term);
@@ -647,12 +649,11 @@ public class Raft {
              * pending log entries, and scanning the entire tail of the log
              * could be expensive.
              */
-            if (ents.size() > 0) {
-                pendingConfIndex = ents.get(ents.size() - 1).getIndex();
+            if (Lists.size(ents) > 0) {
+                pendingConfIndex = ents.get(Lists.size(ents) - 1).getIndex();
             }
 
-            List<Entry> entries = new ArrayList<>();
-            entries.add(new Entry());
+            List<Entry> entries = Lists.of(new Entry());
             appendEntry(entries);
             logger.info("{} became leader at term {}", id, term);
         } catch (Errors.RaftException e) {
@@ -692,7 +693,7 @@ public class Raft {
                 continue;
             }
             logger.info("{} [logterm: {}, index: {}] sent {} request to {} at term {}",
-                    id, raftLog.lastTerm(), raftLog.lastIndex(), voteMsg, id, this.term);
+                id, raftLog.lastTerm(), raftLog.lastIndex(), voteMsg, id, this.term);
 
             byte[] ctx = null;
             if (t == Transfer) {
@@ -741,7 +742,7 @@ public class Raft {
                     // If a server receives a RequestVote request within the minimum election timeout
                     // of hearing from a current leader, it does not update its term or grant its vote
                     logger.info("{} [logterm: {}, index: {}, vote: {}] ignored {} from {} [logterm: {}, index: {}] at term {}: lease is not expired (remaining ticks: {})",
-                            id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term, electionTimeout - electionElapsed);
+                        id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term, electionTimeout - electionElapsed);
                     return;
                 }
             }
@@ -758,7 +759,7 @@ public class Raft {
                  */
             } else {
                 logger.info("{} [term: {}] received a {} message with higher term from {} [term: {}]",
-                        id, term, m.getType(), m.getFrom(), m.getTerm());
+                    id, term, m.getType(), m.getFrom(), m.getTerm());
                 if (m.getType() == MsgApp || m.getType() == MsgHeartbeat || m.getType() == MsgSnap) {
                     becomeFollower(m.getTerm(), m.getFrom());
                 } else {
@@ -794,7 +795,7 @@ public class Raft {
                  * we drop messages with a lower term.
                  */
                 logger.info("{} [logterm: {}, index: {}, vote: {}] rejected {} from {} [logterm: {}, index: {}] at term {}",
-                        id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
+                    id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
                 Message msg = new Message();
                 msg.setTo(m.getFrom());
                 msg.setTerm(term);
@@ -804,7 +805,7 @@ public class Raft {
             } else {
                 // ignore other cases
                 logger.info("{} [term: {}] ignored a {} message with lower term from {} [term: {}]",
-                        id, term, m.getType(), m.getFrom(), m.getTerm());
+                    id, term, m.getType(), m.getFrom(), m.getTerm());
             }
             return;
         }
@@ -835,19 +836,19 @@ public class Raft {
                 if (isLearner) {
                     // TODO: learner may need to vote, in case of node down when confchange.
                     logger.info("{} [logterm: {}, index: {}, vote: {}] ignored {} from {} [logterm: {}, index: {}] at term {}: learner can not vote",
-                            id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
+                        id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
                     return;
                 }
                 // We can vote if this is a repeat of a vote we've already cast...
                 boolean canVote = vote == m.getFrom() ||
-                        // ...we haven't voted and we don't think there's a leader yet in this term...
-                        (vote == None && lead == None) ||
-                        // ...or this is a PreVote for a future term...
-                        (m.getType() == MsgPreVote && m.getTerm() > term);
+                    // ...we haven't voted and we don't think there's a leader yet in this term...
+                    (vote == None && lead == None) ||
+                    // ...or this is a PreVote for a future term...
+                    (m.getType() == MsgPreVote && m.getTerm() > term);
                 // ...and we believe the candidate is up to date.
                 if (canVote && raftLog.isUpToDate(m.getIndex(), m.getLogTerm())) {
                     logger.info("{} [logterm: {}, index: {}, vote: {}] cast {} for {} [logterm: {}, index: {}] at term {}",
-                            id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
+                        id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
                     /*
                      * When responding to Msg{Pre,}Vote messages we include the term
                      * from the message, not the local term. To see why consider the
@@ -871,7 +872,7 @@ public class Raft {
                     }
                 } else {
                     logger.info("{} [logterm: {}, index: {}, vote: {}] rejected {} from {} [logterm: {}, index: {}] at term {}",
-                            id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
+                        id, raftLog.lastTerm(), raftLog.lastIndex(), vote, m.getType(), m.getFrom(), m.getLogTerm(), m.getIndex(), term);
                     Message msg = new Message();
                     msg.setTo(m.getFrom());
                     msg.setTerm(term);
@@ -898,7 +899,7 @@ public class Raft {
                 }
                 return;
             case MsgProp:
-                if (m.getEntries().size() == 0) {
+                if (Lists.size(m.getEntries()) == 0) {
                     throw new Errors.RaftException(r.id + " stepped empty MsgProp");
                 }
                 if (r.prs.containsKey(r.id)) {
@@ -915,12 +916,12 @@ public class Raft {
                     throw ERR_PROPOSAL_DROPPED;
                 }
 
-                for (int i = 0; i < m.getEntries().size(); i++) {
+                for (int i = 0; i < Lists.size(m.getEntries()); i++) {
                     Entry e = m.getEntries().get(i);
                     if (e.getType() == EntryConfChange) {
                         if (r.pendingConfIndex > r.raftLog.applied) {
                             logger.info("propose conf {} ignored since pending unapplied configuration [index {}, applied {}]",
-                                    e, r.pendingConfIndex, r.raftLog.applied);
+                                e, r.pendingConfIndex, r.raftLog.applied);
                             Entry ent = new Entry();
                             ent.setType(EntryNormal);
                             m.getEntries().set(i, ent);
@@ -988,7 +989,7 @@ public class Raft {
 
                 if (m.getReject()) {
                     logger.debug("{} received msgApp rejection(lastindex: {}) from {} for index {}",
-                            r.id, m.getRejectHint(), m.getFrom(), m.getIndex());
+                        r.id, m.getRejectHint(), m.getFrom(), m.getIndex());
                     if (pr.maybeDecrTo(m.getIndex(), m.getRejectHint())) {
                         logger.debug("{} decreased progress of {} to [{}]", r.id, m.getFrom(), pr);
                         if (pr.state == Replicate) {
@@ -1097,7 +1098,7 @@ public class Raft {
                 if (lastLeadTransferee != None) {
                     if (lastLeadTransferee == leadTransferee) {
                         logger.info("{} [term {}] transfer leadership to {} is in progress, ignores request to same node {}",
-                                r.id, r.term, leadTransferee, leadTransferee);
+                            r.id, r.term, leadTransferee, leadTransferee);
                         return;
                     }
                     r.abortLeaderTransfer();
@@ -1169,7 +1170,7 @@ public class Raft {
                             r.becomeLeader();
                             r.bcastAppend();
                         }
-                    } else if (quorum == r.votes.size() - gr) {
+                    } else if (quorum == Maps.size(r.votes) - gr) {
                         // pb.MsgPreVoteResp contains future term of pre-candidate
                         // m.Term > r.Term; reuse r.Term
                         r.becomeFollower(r.term, None);
@@ -1237,7 +1238,7 @@ public class Raft {
                 r.send(m);
                 break;
             case MsgReadIndexResp:
-                if (m.getEntries().size() != 1) {
+                if (Lists.size(m.getEntries()) != 1) {
                     logger.error("{} invalid format of MsgReadIndexResp from {}, entries count: {}", r.id, m.getFrom(), m.getEntries().size());
                     return;
                 }
@@ -1269,7 +1270,7 @@ public class Raft {
             send(msg);
         } else {
             logger.debug("{} [logterm: {}, index: {}] rejected msgApp [logterm: {}, index: {}] from {}",
-                    id, raftLog.zeroTermOnErrCompacted(() -> raftLog.term(m.getIndex())), m.getIndex(), m.getLogTerm(), m.getIndex(), m.getFrom());
+                id, raftLog.zeroTermOnErrCompacted(() -> raftLog.term(m.getIndex())), m.getIndex(), m.getLogTerm(), m.getIndex(), m.getFrom());
             Message msg = new Message();
             msg.setTo(m.getFrom());
             msg.setType(MsgAppResp);
@@ -1294,7 +1295,7 @@ public class Raft {
         long sterm = m.getSnapshot().getMetadata().getTerm();
         if (restore(m.getSnapshot())) {
             logger.info("{} [commit: {}] restored snapshot [index: {}, term: {}]",
-                    this.id, raftLog.committed, sindex, sterm);
+                this.id, raftLog.committed, sindex, sterm);
             Message msg = new Message();
             msg.setTo(m.getFrom());
             msg.setType(MsgAppResp);
@@ -1302,7 +1303,7 @@ public class Raft {
             send(msg);
         } else {
             logger.info("{} [commit: {}] ignored snapshot [index: {}, term: {}]",
-                    this.id, raftLog.committed, sindex, sterm);
+                this.id, raftLog.committed, sindex, sterm);
             Message msg = new Message();
             msg.setTo(m.getFrom());
             msg.setType(MsgAppResp);
@@ -1321,7 +1322,7 @@ public class Raft {
         }
         if (raftLog.matchTerm(s.getMetadata().getIndex(), s.getMetadata().getTerm())) {
             logger.info("{} [commit: {}, lastindex: {}, lastterm: {}] fast-forwarded commit to snapshot [index: {}, term: {}]",
-                    this.id, raftLog.committed, raftLog.lastIndex(), raftLog.lastTerm(), s.getMetadata().getIndex(), s.getMetadata().getTerm());
+                this.id, raftLog.committed, raftLog.lastIndex(), raftLog.lastTerm(), s.getMetadata().getIndex(), s.getMetadata().getTerm());
             raftLog.commitTo(s.getMetadata().getIndex());
             return false;
         }
@@ -1337,11 +1338,11 @@ public class Raft {
         }
 
         logger.info("{} [commit: {}, lastindex: {}, lastterm: {}] starts to restore snapshot [index: {}, term: {}]",
-                this.id, raftLog.committed, raftLog.lastIndex(), raftLog.lastTerm(), s.getMetadata().getIndex(), s.getMetadata().getTerm());
+            this.id, raftLog.committed, raftLog.lastIndex(), raftLog.lastTerm(), s.getMetadata().getIndex(), s.getMetadata().getTerm());
 
         raftLog.restore(s);
-        this.prs = new HashMap<>();
-        this.learnerPrs = new HashMap<>();
+        this.prs = Maps.of();
+        this.learnerPrs = Maps.of();
         restoreNode(s.getMetadata().getConfState().getNodes(), false);
         restoreNode(s.getMetadata().getConfState().getLearners(), true);
         return true;
@@ -1418,7 +1419,7 @@ public class Raft {
         delProgress(id);
 
         // do not try to commit or abort transferring if there is no nodes in the cluster.
-        if (prs.size() == 0 && learnerPrs.size() == 0) {
+        if (Maps.size(prs) == 0 && Maps.size(learnerPrs) == 0) {
             return;
         }
 
@@ -1568,14 +1569,14 @@ public class Raft {
          * previous configuration will panic if peers is set. peer is private and only
          * used for testing right now.
          */
-        public List<Long> peers;
+        public List<Long> peers = Lists.of();
 
         /**
          * learners contains the IDs of all learner nodes (including self if the
          * local node is a learner) in the raft cluster. learners only receives
          * entries from the leader node. It does not vote or promote itself.
          */
-        public List<Long> learners;
+        public List<Long> learners = Lists.of();
 
         /**
          * ElectionTick is the number of Node.Tick invocations that must pass between
@@ -1654,7 +1655,7 @@ public class Raft {
          * in that case.
          * CheckQuorum MUST be enabled if ReadOnlyOption is LeaseBased.
          */
-        public ReadOnly.ReadOnlyOption readOnlyOption;
+        public ReadOnly.ReadOnlyOption readOnlyOption = Safe;
 
         /**
          * DisableProposalForwarding set to true means that followers will drop
@@ -1667,11 +1668,6 @@ public class Raft {
          * to the leader.
          */
         public boolean disableProposalForwarding;
-
-        public Config() {
-            this.peers = Lists.of();
-            this.learners = Lists.of();
-        }
 
         public void validate() {
             if (id == None) {

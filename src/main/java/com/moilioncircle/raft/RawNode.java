@@ -27,8 +27,6 @@ import com.moilioncircle.raft.entity.Message;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
-
-import java.util.ArrayList;
 import java.util.List;
 
 import static com.moilioncircle.raft.Errors.ERR_STEP_LOCAL_MSG;
@@ -66,39 +64,6 @@ public class RawNode {
     public SoftState prevSoftSt;
     public HardState prevHardSt;
 
-    public void commitReady(Ready rd) {
-        if (rd.softState != null) {
-            prevSoftSt = rd.softState;
-        }
-        if (!isEmptyHardState(rd.hardState)) {
-            prevHardSt = rd.hardState;
-        }
-        if (prevHardSt.getCommit() != 0) {
-            /*
-             * In most cases, prevHardSt and rd.HardState will be the same
-             * because when there are new entries to apply we just sent a
-             * HardState with an updated Commit value. However, on initial
-             * startup the two are different because we don't send a HardState
-             * until something changes, but we do send any un-applied but
-             * committed entries (and previously-committed entries may be
-             * incorporated into the snapshot, even if rd.CommittedEntries is
-             * empty). Therefore we mark all committed entries as applied
-             * whether they were included in rd.HardState or not.
-             */
-            raft.raftLog.appliedTo(prevHardSt.getCommit());
-        }
-        if (rd.entries.size() > 0) {
-            Entry e = rd.entries.get(rd.entries.size() - 1);
-            raft.raftLog.stableTo(e.getIndex(), e.getTerm());
-        }
-        if (!isEmptySnap(rd.snapshot)) {
-            raft.raftLog.stableSnapTo(rd.snapshot.getMetadata().getIndex());
-        }
-        if (rd.readStates.size() != 0) {
-            raft.readStates = null;
-        }
-    }
-
     /**
      * RawNode returns a new RawNode given configuration and a list of raft peers.
      */
@@ -117,8 +82,8 @@ public class RawNode {
          */
         if (lastIndex == 0) {
             raft.becomeFollower(1, None);
-            List<Entry> ents = new ArrayList<>();
-            for (int i = 0; i < peers.size(); i++) {
+            List<Entry> ents = Lists.of();
+            for (int i = 0; i < Lists.size(peers); i++) {
                 Peer peer = peers.get(i);
                 ConfChange cc = new ConfChange();
                 cc.setType(ConfChangeAddNode);
@@ -146,6 +111,39 @@ public class RawNode {
             prevHardSt = new HardState();
         } else {
             prevHardSt = raft.hardState();
+        }
+    }
+
+    public void commitReady(Ready rd) {
+        if (rd.softState != null) {
+            prevSoftSt = rd.softState;
+        }
+        if (!isEmptyHardState(rd.hardState)) {
+            prevHardSt = rd.hardState;
+        }
+        if (prevHardSt.getCommit() != 0) {
+            /*
+             * In most cases, prevHardSt and rd.HardState will be the same
+             * because when there are new entries to apply we just sent a
+             * HardState with an updated Commit value. However, on initial
+             * startup the two are different because we don't send a HardState
+             * until something changes, but we do send any un-applied but
+             * committed entries (and previously-committed entries may be
+             * incorporated into the snapshot, even if rd.CommittedEntries is
+             * empty). Therefore we mark all committed entries as applied
+             * whether they were included in rd.HardState or not.
+             */
+            raft.raftLog.appliedTo(prevHardSt.getCommit());
+        }
+        if (Lists.size(rd.entries) > 0) {
+            Entry e = rd.entries.get(Lists.size(rd.entries) - 1);
+            raft.raftLog.stableTo(e.getIndex(), e.getTerm());
+        }
+        if (!isEmptySnap(rd.snapshot)) {
+            raft.raftLog.stableSnapTo(rd.snapshot.getMetadata().getIndex());
+        }
+        if (Lists.size(rd.readStates) != 0) {
+            raft.readStates = null;
         }
     }
 
@@ -186,7 +184,7 @@ public class RawNode {
         Message msg = new Message();
         msg.setType(MsgProp);
         msg.setFrom(raft.id);
-        List<Entry> entries = new ArrayList<>();
+        List<Entry> entries = Lists.of();
         Entry ent = new Entry();
         ent.setData(data);
         entries.add(ent);
@@ -201,7 +199,7 @@ public class RawNode {
         byte[] data = ConfChange.build(cc).toByteArray();
         Message msg = new Message();
         msg.setType(MsgProp);
-        List<Entry> entries = new ArrayList<>();
+        List<Entry> entries = Lists.of();
         Entry ent = new Entry();
         ent.setType(EntryConfChange);
         ent.setData(data);
@@ -236,7 +234,7 @@ public class RawNode {
         }
         ConfState cs = new ConfState();
         cs.setNodes(raft.nodes());
-        cs.setLearners(raft.learnerNodes()); ;
+        cs.setLearners(raft.learnerNodes());
         return cs;
     }
 
@@ -346,7 +344,7 @@ public class RawNode {
     public void readIndex(byte[] rctx) {
         Message msg = new Message();
         msg.setType(MsgReadIndex);
-        List<Entry> entries = new ArrayList<>();
+        List<Entry> entries = Lists.of();
         Entry ent = new Entry();
         ent.setData(rctx);
         entries.add(ent);
@@ -370,14 +368,14 @@ public class RawNode {
          * SoftState will be nil if there is no update.
          * It is not required to consume or store SoftState.
          */
-        public SoftState softState;
+        public SoftState softState = new SoftState();
 
         /**
          * The current state of a Node to be saved to stable storage BEFORE
          * Messages are sent.
          * HardState will be equal to empty state if there is no update.
          */
-        public HardState hardState;
+        public HardState hardState = new HardState();
 
         /**
          * ReadStates can be used for node to serve linearizable read requests locally
@@ -385,25 +383,25 @@ public class RawNode {
          * Note that the readState will be returned when raft receives msgReadIndex.
          * The returned is only valid for the request that requested to read.
          */
-        public List<ReadState> readStates;
+        public List<ReadState> readStates = Lists.of();
 
         /**
          * Entries specifies entries to be saved to stable storage BEFORE
          * Messages are sent.
          */
-        public List<Entry> entries;
+        public List<Entry> entries = Lists.of();
 
         /**
          * Snapshot specifies the snapshot to be saved to stable storage.
          */
-        public Snapshot snapshot;
+        public Snapshot snapshot = new Snapshot();
 
         /**
          * CommittedEntries specifies entries to be committed to a
          * store/state-machine. These have previously been committed to stable
          * store.
          */
-        public List<Entry> committedEntries;
+        public List<Entry> committedEntries = Lists.of();
 
         /**
          * Messages specifies outbound messages to be sent AFTER Entries are
@@ -411,7 +409,7 @@ public class RawNode {
          * If it contains a MsgSnap message, the application MUST report back to raft
          * when the snapshot has been received or has failed by calling ReportSnapshot.
          */
-        public List<Message> messages;
+        public List<Message> messages = Lists.of();
 
         /**
          * MustSync indicates whether the HardState and Entries must be synchronously
@@ -435,10 +433,10 @@ public class RawNode {
             if (r.raftLog.unstable.snapshot != null) {
                 snapshot = r.raftLog.unstable.snapshot;
             }
-            if (r.readStates.size() != 0) {
+            if (Lists.size(r.readStates) != 0) {
                 readStates = r.readStates;
             }
-            mustSync = mustSync(hardState, prevHardSt, entries.size());
+            mustSync = mustSync(hardState, prevHardSt, Lists.size(entries));
         }
 
         /**
@@ -458,8 +456,8 @@ public class RawNode {
 
         public boolean containsUpdates() {
             return softState != null || !isEmptyHardState(hardState) ||
-                    !isEmptySnap(snapshot) || entries.size() > 0 ||
-                    committedEntries.size() > 0 || messages.size() > 0 || readStates.size() != 0;
+                !isEmptySnap(snapshot) || Lists.size(entries) > 0 ||
+                Lists.size(committedEntries) > 0 || Lists.size(messages) > 0 || Lists.size(readStates) != 0;
         }
 
         public static boolean isHardStateEqual(HardState a, HardState b) {
@@ -488,7 +486,7 @@ public class RawNode {
 
     public static class Peer {
         public long id;
-        public byte[] context;
+        public byte[] context = new byte[0];
 
         @Override
         public String toString() {

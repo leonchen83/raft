@@ -17,7 +17,6 @@
 package com.moilioncircle.raft;
 
 import com.moilioncircle.raft.entity.Entry;
-
 import java.util.List;
 
 import static com.moilioncircle.raft.Raft.noLimit;
@@ -27,6 +26,7 @@ import static com.moilioncircle.raft.Raft.noLimit;
  * @since 1.0.0
  */
 public class TestUtil {
+
     public static Entry newEntry(long term, long index) {
         Entry entry = new Entry();
         entry.setTerm(term);

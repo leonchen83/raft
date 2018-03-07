@@ -2,18 +2,15 @@ package com.moilioncircle.raft;
 
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
-import com.moilioncircle.raft.util.Arrays;
 import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.moilioncircle.raft.Errors.ERR_COMPACTED;
 import static com.moilioncircle.raft.Errors.ERR_UNAVAILABLE;
@@ -77,14 +74,14 @@ public class RaftLog {
      */
     public Tuple2<Long, Boolean> maybeAppend(long index, long logTerm, long committed, List<Entry> ents) {
         if (matchTerm(index, logTerm)) {
-            long lastnewi = index + ents.size();
+            long lastnewi = index + Lists.size(ents);
             long ci = findConflict(ents);
             if (ci == 0) {
             } else if (ci <= committed) {
                 throw new Errors.RaftException("entry " + ci + " conflict with committed entry [committed(" + committed + ")]");
             } else {
                 long offset = index + 1;
-                append(Arrays.slice(ents, (int) (ci - offset), ents.size()));
+                append(Lists.slice(ents, (int) (ci - offset), Lists.size(ents)));
             }
             commitTo(min(committed, lastnewi));
             return Tuples.of(lastnewi, true);
@@ -93,7 +90,7 @@ public class RaftLog {
     }
 
     public long append(List<Entry> ents) {
-        if (ents.size() == 0) {
+        if (Lists.size(ents) == 0) {
             return lastIndex();
         }
         long after = ents.get(0).getIndex() - 1;
@@ -131,8 +128,8 @@ public class RaftLog {
     }
 
     public List<Entry> unstableEntries() {
-        if (unstable.entries.size() == 0) {
-            return null;
+        if (Lists.size(unstable.entries) == 0) {
+            return Lists.of();
         }
         return unstable.entries;
     }
@@ -319,7 +316,7 @@ public class RaftLog {
         if (lo == hi) {
             return null;
         }
-        List<Entry> ents = new ArrayList<>();
+        List<Entry> ents = Lists.of();
         if (lo < unstable.offset) {
             try {
                 List<Entry> storedEnts = storage.entries(lo, min(hi, unstable.offset), maxSize);
@@ -341,7 +338,7 @@ public class RaftLog {
         }
         if (hi > unstable.offset) {
             List<Entry> unstable = this.unstable.slice(max(lo, this.unstable.offset), hi);
-            if (ents.size() > 0) {
+            if (Lists.size(ents) > 0) {
                 ents.addAll(unstable);
             } else {
                 ents = unstable;

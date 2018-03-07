@@ -31,4 +31,18 @@ public class Lists {
         return list;
     }
 
+    public static <T> boolean isEmpty(List<T> list) {
+        return list == null || list.isEmpty();
+    }
+
+    public static <T> int size(List<T> list) {
+        return list == null ? 0 : list.size();
+    }
+
+    public static <T> List<T> slice(List<T> raw, int lo, int hi) {
+        List<T> list = new ArrayList<>(hi - lo);
+        for (int i = lo; i < hi; i++)
+            list.add(raw.get(i));
+        return list;
+    }
 }

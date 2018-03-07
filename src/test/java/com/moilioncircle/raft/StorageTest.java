@@ -4,11 +4,9 @@ import com.moilioncircle.raft.entity.ConfState;
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.entity.SnapshotMetadata;
-import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.Arrays;
+import com.moilioncircle.raft.util.Lists;
 import java.util.List;
+import org.junit.Test;
 
 import static com.moilioncircle.raft.Errors.ERR_COMPACTED;
 import static com.moilioncircle.raft.Errors.ERR_SNAP_OUT_OF_DATE;
@@ -26,10 +24,7 @@ public class StorageTest {
 
     @Test
     public void testStorageTerm() {
-        List<Entry> ents = new ArrayList<>();
-        ents.add(newEntry(3L, 3L));
-        ents.add(newEntry(4L, 4L));
-        ents.add(newEntry(5L, 5L));
+        List<Entry> ents = Lists.of(newEntry(3L, 3L), newEntry(4L, 4L), newEntry(5L, 5L));
 
         class Test {
             public Test(long i, Exception werr, long wterm, boolean wpanic) {
@@ -69,7 +64,7 @@ public class StorageTest {
 
     @Test
     public void testStorageEntries() {
-        List<Entry> ents = new ArrayList<>();
+        List<Entry> ents = Lists.of(newEntry(3L, 3L), newEntry(4L, 4L), newEntry(5L, 5L), newEntry(6L, 6L));
         ents.add(newEntry(3L, 3L));
         ents.add(newEntry(4L, 4L));
         ents.add(newEntry(5L, 5L));
@@ -90,20 +85,20 @@ public class StorageTest {
         Test[] tests = new Test[] {
                 new Test(2, 6, Long.MAX_VALUE, ERR_COMPACTED, null),
                 new Test(3, 4, Long.MAX_VALUE, ERR_COMPACTED, null),
-                new Test(4, 5, Long.MAX_VALUE, ERR_COMPACTED, Arrays.asList(newEntry(4L, 4L))),
-                new Test(4, 6, Long.MAX_VALUE, ERR_COMPACTED, Arrays.asList(
+            new Test(4, 5, Long.MAX_VALUE, ERR_COMPACTED, Lists.of(newEntry(4L, 4L))),
+            new Test(4, 6, Long.MAX_VALUE, ERR_COMPACTED, Lists.of(
                         newEntry(4L, 4L),
                         newEntry(5L, 5L))),
-                new Test(4, 7, Long.MAX_VALUE, ERR_COMPACTED, Arrays.asList(
+            new Test(4, 7, Long.MAX_VALUE, ERR_COMPACTED, Lists.of(
                         newEntry(4L, 4L),
                         newEntry(5L, 5L),
                         newEntry(6L, 6L))),
-                new Test(4, 7, 0, ERR_COMPACTED, Arrays.asList(
+            new Test(4, 7, 0, ERR_COMPACTED, Lists.of(
                         newEntry(4L, 4L))),
-                new Test(4, 7, 2, ERR_COMPACTED, Arrays.asList(
+            new Test(4, 7, 2, ERR_COMPACTED, Lists.of(
                         newEntry(4L, 4L),
                         newEntry(5L, 5L))),
-                new Test(4, 7, 3, ERR_COMPACTED, Arrays.asList(
+            new Test(4, 7, 3, ERR_COMPACTED, Lists.of(
                         newEntry(4L, 4L),
                         newEntry(5L, 5L),
                         newEntry(6L, 6L)))
@@ -128,25 +123,19 @@ public class StorageTest {
 
     @Test
     public void testStorageLastIndex() {
-        List<Entry> ents = new ArrayList<>();
-        ents.add(newEntry(3L, 3L));
-        ents.add(newEntry(4L, 4L));
-        ents.add(newEntry(5L, 5L));
+        List<Entry> ents = Lists.of(newEntry(3L, 3L), newEntry(4L, 4L), newEntry(5L, 5L));
         Storage.MemoryStorage s = new Storage.MemoryStorage(ents);
 
         long last = s.lastIndex();
         assertEquals(5L, last);
-        s.append(Arrays.asList(newEntry(5L, 6L)));
+        s.append(Lists.of(newEntry(5L, 6L)));
         last = s.lastIndex();
         assertEquals(6L, last);
     }
 
     @Test
     public void testStorageFirstIndex() {
-        List<Entry> ents = new ArrayList<>();
-        ents.add(newEntry(3L, 3L));
-        ents.add(newEntry(4L, 4L));
-        ents.add(newEntry(5L, 5L));
+        List<Entry> ents = Lists.of(newEntry(3L, 3L), newEntry(4L, 4L), newEntry(5L, 5L), newEntry(6L, 6L));
         Storage.MemoryStorage s = new Storage.MemoryStorage(ents);
         long first = s.firstIndex();
         assertEquals(4L, first);
@@ -157,10 +146,7 @@ public class StorageTest {
 
     @Test
     public void testStorageCompact() {
-        List<Entry> ents = new ArrayList<>();
-        ents.add(newEntry(3L, 3L));
-        ents.add(newEntry(4L, 4L));
-        ents.add(newEntry(5L, 5L));
+        List<Entry> ents = Lists.of(newEntry(3L, 3L), newEntry(4L, 4L), newEntry(5L, 5L), newEntry(6L, 6L));
         class Test {
             public Test(long i, Exception werr, long windex, long wterm, int wlen) {
                 this.i = i;
@@ -199,12 +185,9 @@ public class StorageTest {
 
     @Test
     public void testStorageCreateSnapshot() {
-        List<Entry> ents = new ArrayList<>();
-        ents.add(newEntry(3L, 3L));
-        ents.add(newEntry(4L, 4L));
-        ents.add(newEntry(5L, 5L));
+        List<Entry> ents = Lists.of(newEntry(3L, 3L), newEntry(4L, 4L), newEntry(5L, 5L), newEntry(6L, 6L));
         ConfState cs = new ConfState();
-        cs.setNodes(Arrays.asList(1L, 2L, 3L));
+        cs.setNodes(Lists.of(1L, 2L, 3L));
         byte[] data = "data".getBytes();
         class Test {
             public Test(long i, Exception werr, Snapshot wsnap) {
@@ -254,10 +237,7 @@ public class StorageTest {
 
     @Test
     public void testStorageAppend() {
-        List<Entry> ents = new ArrayList<>();
-        ents.add(newEntry(3L, 3L));
-        ents.add(newEntry(4L, 4L));
-        ents.add(newEntry(5L, 5L));
+        List<Entry> ents = Lists.of(newEntry(3L, 3L), newEntry(4L, 4L), newEntry(5L, 5L), newEntry(6L, 6L));
         class Test {
             public Test(List<Entry> entries, Exception werr, List<Entry> wentries) {
                 this.entries = entries;
@@ -270,52 +250,52 @@ public class StorageTest {
             public List<Entry> wentries;
         }
         Test[] tests = new Test[] {
-            new Test(Arrays.asList(
+            new Test(Lists.of(
                     newEntry(3L, 3L),
                     newEntry(4L, 4L),
                     newEntry(5L, 5L)
-            ), null, Arrays.asList(
+            ), null, Lists.of(
                     newEntry(3L, 3L),
                     newEntry(4L, 4L),
                     newEntry(5L, 5L)
             )),
-            new Test(Arrays.asList(
+            new Test(Lists.of(
                     newEntry(3L, 3L),
                     newEntry(6L, 4L),
                     newEntry(6L, 5L)
-            ), null, Arrays.asList(
+            ), null, Lists.of(
                     newEntry(3L, 3L),
                     newEntry(6L, 4L),
                     newEntry(6L, 5L)
             )),
-            new Test(Arrays.asList(
+            new Test(Lists.of(
                     newEntry(3L, 3L),
                     newEntry(4L, 4L),
                     newEntry(5L, 5L),
                     newEntry(6L, 6L)
-            ), null, Arrays.asList(
+            ), null, Lists.of(
                     newEntry(3L, 3L),
                     newEntry(4L, 4L),
                     newEntry(5L, 5L),
                     newEntry(6L, 6L)
             )),
-            new Test(Arrays.asList(
+            new Test(Lists.of(
                     newEntry(3L, 2L),
                     newEntry(3L, 3L),
                     newEntry(5L, 4L)
-            ), null, Arrays.asList(
+            ), null, Lists.of(
                     newEntry(3L, 3L),
                     newEntry(5L, 4L)
             )),
-            new Test(Arrays.asList(
+            new Test(Lists.of(
                     newEntry(5L, 4L)
-            ), null, Arrays.asList(
+            ), null, Lists.of(
                     newEntry(3L, 3L),
                     newEntry(5L, 4L)
             )),
-            new Test(Arrays.asList(
+            new Test(Lists.of(
                     newEntry(5L, 6L)
-            ), null, Arrays.asList(
+            ), null, Lists.of(
                     newEntry(3L, 3L),
                     newEntry(4L, 4L),
                     newEntry(5L, 5L),
@@ -343,7 +323,7 @@ public class StorageTest {
     @Test
     public void testStorageApplySnapshot() {
         ConfState cs = new ConfState();
-        cs.setNodes(Arrays.asList(1L, 2L, 3L));
+        cs.setNodes(Lists.of(1L, 2L, 3L));
         byte[] data = "data".getBytes();
         Snapshot s1 = new Snapshot();
         SnapshotMetadata m1 = new SnapshotMetadata();

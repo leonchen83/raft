@@ -40,7 +40,7 @@ public class Progress {
      * When in ProgressStateSnapshot, leader should have sent out snapshot
      * before and stops sending any replication message.
      */
-    public ProgressState state;
+    public ProgressState state = Probe;
 
     /**
      * Paused is used in ProgressStateProbe.
@@ -229,7 +229,7 @@ public class Progress {
          * buffer contains the index of the last entry
          * inside one message.
          */
-        public long[] buffer;
+        public long[] buffer = new long[0];
 
         public Inflights(int size) {
             this.size = size;

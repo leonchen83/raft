@@ -17,9 +17,8 @@
 package com.moilioncircle.raft.entity;
 
 import com.moilioncircle.raft.entity.proto.RaftProtos;
+import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
-
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -27,13 +26,8 @@ import java.util.List;
  * @since 1.0.0
  */
 public class ConfState {
-    private List<Long> nodes;
-    private List<Long> learners;
-
-    public ConfState() {
-        this.nodes = new ArrayList<>();
-        this.learners = new ArrayList<>();
-    }
+    private List<Long> nodes = Lists.of();
+    private List<Long> learners = Lists.of();
 
     public List<Long> getNodes() {
         return nodes;

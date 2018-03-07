@@ -2,15 +2,13 @@ package com.moilioncircle.raft;
 
 import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.Snapshot;
-import com.moilioncircle.raft.util.Arrays;
 import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.List;
 
 public class LogUnstable {
 
@@ -44,7 +42,7 @@ public class LogUnstable {
      * unstable entry or snapshot.
      */
     public Tuple2<Long, Boolean> maybeLastIndex() {
-        int l = entries.size();
+        int l = Lists.size(entries);
         if (l != 0) {
             return Tuples.of(offset + l - 1, true);
         }
@@ -90,7 +88,7 @@ public class LogUnstable {
          * an unstable entry.
          */
         if (tuple.getV1() == t && i >= offset) {
-            entries = Arrays.slice(entries, (int) (i + 1 - offset), entries.size());
+            entries = Lists.slice(entries, (int) (i + 1 - offset), entries.size());
             offset = i + 1;
             shrinkEntriesArray();
         }
@@ -108,9 +106,9 @@ public class LogUnstable {
         // memory usage vs number of allocations. It could probably be improved
         // with some focused tuning.
 
-        if (entries.size() == 0) {
-            entries = Lists.of();
-        }
+        // if (Lists.isEmpty(entries)) {
+        // entries = Lists.of();
+        // }
         // TODO
         // final int lenMultiple = 2;
         // else if (entries.size() * lenMultiple < entries.size())/* cap(u.entries) */ {
@@ -134,7 +132,7 @@ public class LogUnstable {
 
     public void truncateAndAppend(List<Entry> ents) {
         long after = ents.get(0).getIndex();
-        if (after == offset + entries.size()) {
+        if (after == offset + Lists.size(entries)) {
             // after is the next index in the u.entries directly append
             entries.addAll(ents);
         } else if (after <= offset) {
@@ -155,7 +153,7 @@ public class LogUnstable {
 
     public List<Entry> slice(long lo, long hi) {
         mustCheckOutOfBounds(lo, hi);
-        return Arrays.slice(entries, (int) (lo - offset), (int) (hi - offset));
+        return Lists.slice(entries, (int) (lo - offset), (int) (hi - offset));
     }
 
     /**
@@ -165,7 +163,7 @@ public class LogUnstable {
         if (lo > hi) {
             throw new Errors.RaftException("invalid unstable.slice " + lo + " > " + hi);
         }
-        long upper = offset + entries.size();
+        long upper = offset + Lists.size(entries);
         if (lo < offset || hi > upper) {
             throw new Errors.RaftException("unstable.slice[" + lo + "," + hi + ") out of bound [" + offset + "," + upper + "]");
         }

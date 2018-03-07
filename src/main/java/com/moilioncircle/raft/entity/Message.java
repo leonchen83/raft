@@ -18,33 +18,29 @@ package com.moilioncircle.raft.entity;
 
 import com.google.protobuf.ByteString;
 import com.moilioncircle.raft.entity.proto.RaftProtos;
+import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
-
-import java.util.ArrayList;
 import java.util.List;
+
+import static com.moilioncircle.raft.entity.MessageType.MsgHup;
 
 /**
  * @author Leon Chen
  * @since 1.0.0
  */
 public class Message {
-    private MessageType type;
+    private MessageType type = MsgHup;
     private long to;
     private long from;
     private long term;
     private long logTerm;
     private long index;
-    private List<Entry> entries;
+    private List<Entry> entries = Lists.of();
     private long commit;
-    private Snapshot snapshot;
+    private Snapshot snapshot = new Snapshot();
     private boolean reject;
     private long rejectHint;
-    private byte[] context;
-
-    public Message() {
-        this.entries = new ArrayList<>();
-        this.snapshot = new Snapshot();
-    }
+    private byte[] context = new byte[0];
 
     public MessageType getType() {
         return type;
@@ -191,7 +187,7 @@ public class Message {
         }
         r.setReject(message.getReject());
         r.setRejectHint(message.getRejectHint());
-        if (!message.getContext().isEmpty()) {
+        if (message.getContext() != null) {
             r.setContext(message.getContext().toByteArray());
         }
         return r;

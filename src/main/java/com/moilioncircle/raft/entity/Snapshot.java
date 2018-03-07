@@ -25,12 +25,8 @@ import com.moilioncircle.raft.util.Strings;
  * @since 1.0.0
  */
 public class Snapshot {
-    private byte[] data;
-    private SnapshotMetadata metadata;
-
-    public Snapshot() {
-        this.metadata = new SnapshotMetadata();
-    }
+    private byte[] data = new byte[0];
+    private SnapshotMetadata metadata = new SnapshotMetadata();
 
     public byte[] getData() {
         return data;
@@ -66,7 +62,7 @@ public class Snapshot {
 
     public static Snapshot valueOf(RaftProtos.Snapshot snap) {
         Snapshot r = new Snapshot();
-        if (!snap.getData().isEmpty()) {
+        if (snap.getData() != null) {
             r.setData(snap.getData().toByteArray());
         }
         if (snap.getMetadata() != null) {

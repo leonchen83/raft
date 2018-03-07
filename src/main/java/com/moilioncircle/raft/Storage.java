@@ -5,19 +5,18 @@ import com.moilioncircle.raft.entity.Entry;
 import com.moilioncircle.raft.entity.HardState;
 import com.moilioncircle.raft.entity.Snapshot;
 import com.moilioncircle.raft.entity.SnapshotMetadata;
+import com.moilioncircle.raft.util.Lists;
 import com.moilioncircle.raft.util.Strings;
 import com.moilioncircle.raft.util.Tuples;
 import com.moilioncircle.raft.util.type.Tuple2;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import static com.moilioncircle.raft.Errors.ERR_COMPACTED;
 import static com.moilioncircle.raft.Errors.ERR_SNAP_OUT_OF_DATE;
 import static com.moilioncircle.raft.Errors.ERR_UNAVAILABLE;
-import static com.moilioncircle.raft.util.Arrays.slice;
+import static com.moilioncircle.raft.util.Lists.slice;
 
 /**
  * Storage is an interface that may be implemented by the application
@@ -71,11 +70,11 @@ public interface Storage {
     Snapshot snapshot();
 
     static List<Entry> limitSize(List<Entry> ents, long maxSize) {
-        if (ents.size() == 0) {
+        if (Lists.size(ents) == 0) {
             return ents;
         }
         int c = 1;
-        for (; c < ents.size(); c++) {
+        for (; c < Lists.size(ents); c++) {
             if (c >= maxSize) {
                 break;
             }
@@ -90,23 +89,17 @@ public interface Storage {
     class MemoryStorage implements Storage {
         private static final Logger logger = LoggerFactory.getLogger(MemoryStorage.class);
 
-        protected HardState hardState;
-        protected Snapshot snapshot;
+        protected HardState hardState = new HardState();
+        protected Snapshot snapshot = new Snapshot();
         // ents[i] has raft log position i+snapshot.Metadata.Index
-        protected List<Entry> ents;
+        protected List<Entry> ents = Lists.of();
 
         public MemoryStorage() {
-            List<Entry> ents = new ArrayList<>();
             ents.add(new Entry());
-            this.ents = ents;
-            this.hardState = new HardState();
-            this.snapshot = new Snapshot();
         }
 
         public MemoryStorage(List<Entry> ents) {
             this.ents = ents;
-            this.hardState = new HardState();
-            this.snapshot = new Snapshot();
         }
 
         public synchronized void setHardState(HardState hardState) {
@@ -128,7 +121,7 @@ public interface Storage {
                 throw new Errors.RaftException("entries' hi " + hi + " is out of bound lastindex " + lastIndex());
             }
             // only contains dummy entries.
-            if (ents.size() == 1) {
+            if (Lists.size(ents) == 1) {
                 throw ERR_UNAVAILABLE;
             }
 
@@ -150,7 +143,7 @@ public interface Storage {
 
         @Override
         public synchronized long lastIndex() {
-            return ents.get(0).getIndex() + ents.size() - 1;
+            return ents.get(0).getIndex() + Lists.size(ents) - 1;
         }
 
         @Override
@@ -176,7 +169,7 @@ public interface Storage {
             }
 
             this.snapshot = snap;
-            this.ents = new ArrayList<>();
+            this.ents = Lists.of();
             Entry ent = new Entry();
             ent.setTerm(snap.getMetadata().getTerm());
             ent.setIndex(snap.getMetadata().getIndex());
@@ -226,12 +219,12 @@ public interface Storage {
             }
 
             int i = (int) (compactIndex - offset);
-            List<Entry> ents = new ArrayList<>();
+            List<Entry> ents = Lists.of();
             Entry ent = new Entry();
             ent.setIndex(this.ents.get(i).getIndex());
             ent.setTerm(this.ents.get(i).getTerm());
             ents.add(ent);
-            ents.addAll(slice(this.ents, i + 1, this.ents.size()));
+            ents.addAll(slice(this.ents, i + 1, Lists.size(this.ents)));
             this.ents = ents;
         }
 
@@ -241,11 +234,11 @@ public interface Storage {
          * entries[0].Index > ms.entries[0].Index
          */
         public synchronized void append(List<Entry> entries) {
-            if (entries.size() == 0) {
+            if (Lists.size(entries) == 0) {
                 return;
             }
             long first = firstIndex();
-            long last = entries.get(0).getIndex() + entries.size() - 1;
+            long last = entries.get(0).getIndex() + Lists.size(entries) - 1;
 
             // shortcut if there is no new entry.
             if (last < first) {
@@ -253,14 +246,14 @@ public interface Storage {
             }
             // truncate compacted entries
             if (first > entries.get(0).getIndex()) {
-                entries = slice(entries, (int) (first - entries.get(0).getIndex()), entries.size());
+                entries = slice(entries, (int) (first - entries.get(0).getIndex()), Lists.size(entries));
             }
 
             long offset = entries.get(0).getIndex() - ents.get(0).getIndex();
-            if (ents.size() > offset) {
+            if (Lists.size(ents) > offset) {
                 ents = slice(ents, 0, (int) offset);
                 ents.addAll(entries);
-            } else if (ents.size() == offset) {
+            } else if (Lists.size(ents) == offset) {
                 ents.addAll(entries);
             } else {
                 throw new Errors.RaftException("missing log entry [last: " + lastIndex() + ", append at: " + entries.get(0).getIndex() + "]");

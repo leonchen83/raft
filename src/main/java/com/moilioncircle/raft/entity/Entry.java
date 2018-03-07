@@ -19,9 +19,10 @@ package com.moilioncircle.raft.entity;
 import com.google.protobuf.ByteString;
 import com.moilioncircle.raft.entity.proto.RaftProtos;
 import com.moilioncircle.raft.util.Strings;
-
 import java.util.ArrayList;
 import java.util.List;
+
+import static com.moilioncircle.raft.entity.EntryType.EntryNormal;
 
 /**
  * @author Leon Chen
@@ -30,10 +31,8 @@ import java.util.List;
 public class Entry {
     private long term;
     private long index;
-    private EntryType type;
-    private byte[] data;
-
-    public Entry() {}
+    private EntryType type = EntryNormal;
+    private byte[] data = new byte[0];
 
     public long getTerm() {
         return term;
@@ -108,7 +107,7 @@ public class Entry {
         if (entry.getType() != null) {
             r.setType(EntryType.valueOf(entry.getType()));
         }
-        if (!entry.getData().isEmpty()) {
+        if (entry.getData() != null) {
             r.setData(entry.getData().toByteArray());
         }
         return r;

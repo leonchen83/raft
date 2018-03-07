@@ -24,13 +24,9 @@ import com.moilioncircle.raft.util.Strings;
  * @since 1.0.0
  */
 public class SnapshotMetadata {
-    private ConfState confState;
+    private ConfState confState = new ConfState();
     private long index;
     private long term;
-
-    public SnapshotMetadata() {
-        this.confState = new ConfState();
-    }
 
     public ConfState getConfState() {
         return confState;

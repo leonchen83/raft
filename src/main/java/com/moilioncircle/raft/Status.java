@@ -2,9 +2,8 @@ package com.moilioncircle.raft;
 
 import com.moilioncircle.raft.Raft.SoftState;
 import com.moilioncircle.raft.entity.HardState;
+import com.moilioncircle.raft.util.Maps;
 import com.moilioncircle.raft.util.Strings;
-
-import java.util.HashMap;
 import java.util.Map;
 
 import static com.moilioncircle.raft.Raft.StateRole.Leader;
@@ -15,13 +14,13 @@ public class Status {
 
     public long applied;
 
-    public HardState hardState;
+    public HardState hardState = new HardState();
 
-    public SoftState softState;
+    public SoftState softState = new SoftState();
 
     public long leadTransferee;
 
-    public Map<Long, Progress> progress;
+    public Map<Long, Progress> progress = Maps.of();
 
     /**
      * getStatus gets a copy of the current raft status.
@@ -35,7 +34,7 @@ public class Status {
         s.applied = r.raftLog.applied;
 
         if (s.softState.raftState == Leader) {
-            s.progress = new HashMap<>();
+            s.progress = Maps.of();
             for (Map.Entry<Long, Progress> entry : r.prs.entrySet()) {
                 s.progress.put(entry.getKey(), entry.getValue());
             }

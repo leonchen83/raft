@@ -20,17 +20,17 @@ import com.google.protobuf.ByteString;
 import com.moilioncircle.raft.entity.proto.RaftProtos;
 import com.moilioncircle.raft.util.Strings;
 
+import static com.moilioncircle.raft.entity.ConfChangeType.ConfChangeAddNode;
+
 /**
  * @author Leon Chen
  * @since 1.0.0
  */
 public class ConfChange {
     private long id;
-    private ConfChangeType type;
+    private ConfChangeType type = ConfChangeAddNode;
     private long nodeID;
-    private byte[] context;
-
-    public ConfChange() {}
+    private byte[] context = new byte[0];
 
     public long getId() {
         return id;
@@ -89,7 +89,7 @@ public class ConfChange {
             r.setType(ConfChangeType.valueOf(change.getType()));
         }
         r.setNodeID(change.getNodeID());
-        if (!change.getContext().isEmpty()) {
+        if (change.getContext() != null) {
             r.setContext(change.getContext().toByteArray());
         }
         return r;

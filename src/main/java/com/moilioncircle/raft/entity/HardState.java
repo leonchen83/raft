@@ -28,8 +28,6 @@ public class HardState {
     private long vote;
     private long commit;
 
-    public HardState() {}
-
     public long getTerm() {
         return term;
     }

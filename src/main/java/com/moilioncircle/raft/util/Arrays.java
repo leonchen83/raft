@@ -16,18 +16,17 @@
 
 package com.moilioncircle.raft.util;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * @author Baoyi Chen
  * @since 1.0.0
  */
 public class Arrays {
 
-    public static <T> List<T> slice(List<T> raw, int lo, int hi) {
-        List<T> list = new ArrayList<>(hi - lo);
-        for (int i = lo; i < hi; i++) list.add(raw.get(i));
-        return list;
+    public static <T> boolean isEmpty(T[] array) {
+        return array == null || array.length == 0;
+    }
+
+    public static <T> int size(T[] array) {
+        return array == null ? 0 : array.length;
     }
 }

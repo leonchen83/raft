@@ -1,29 +1,26 @@
 package com.moilioncircle.raft;
 
 import com.moilioncircle.raft.entity.Message;
+import com.moilioncircle.raft.util.Lists;
+import com.moilioncircle.raft.util.Maps;
 import com.moilioncircle.raft.util.Strings;
+import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static com.moilioncircle.raft.util.Arrays.slice;
+import static com.moilioncircle.raft.util.Lists.slice;
 
 public class ReadOnly {
 
     private static final Logger logger = LoggerFactory.getLogger(ReadOnly.class);
 
-    public ReadOnlyOption option;
-    public Map<String, ReadIndexStatus> pendingReadIndex;
-    public List<String> readIndexQueue;
+    public ReadOnlyOption option = ReadOnlyOption.Safe;
+    public Map<String, ReadIndexStatus> pendingReadIndex = Maps.of();
+    public List<String> readIndexQueue = Lists.of();
 
     public ReadOnly(ReadOnlyOption option) {
         this.option = option;
-        this.pendingReadIndex = new HashMap<>();
-        this.readIndexQueue = new ArrayList<>();
     }
 
     /**
@@ -35,7 +32,10 @@ public class ReadOnly {
     public void addRequest(long index, Message m) {
         String ctx = new String(m.getEntries().get(0).getData());
         if (!pendingReadIndex.containsKey(ctx)) return;
-        pendingReadIndex.put(ctx, new ReadIndexStatus(m, index, new HashMap<>()));
+        ReadIndexStatus status = new ReadIndexStatus();
+        status.req = m;
+        status.index = index;
+        pendingReadIndex.put(ctx, status);
         readIndexQueue.add(ctx);
     }
 
@@ -51,7 +51,7 @@ public class ReadOnly {
         }
         rs.acks.put(m.getFrom(), new Object());
         // add one to include an ack from local node
-        return rs.acks.size() + 1;
+        return Maps.size(rs.acks) + 1;
     }
 
     /**
@@ -63,7 +63,7 @@ public class ReadOnly {
         int i = 0;
         boolean found = false;
         String ctx = new String(m.getContext());
-        List<ReadIndexStatus> rss = new ArrayList<>();
+        List<ReadIndexStatus> rss = Lists.of();
         for (String okctx : readIndexQueue) {
             i++;
             ReadIndexStatus ok = pendingReadIndex.get(okctx);
@@ -78,7 +78,7 @@ public class ReadOnly {
         }
 
         if (found) {
-            readIndexQueue = slice(readIndexQueue, i, readIndexQueue.size());
+            readIndexQueue = slice(readIndexQueue, i, Lists.size(readIndexQueue));
             for (ReadIndexStatus rs : rss) {
                 pendingReadIndex.remove(new String(rs.req.getEntries().get(0).getData()));
             }
@@ -93,8 +93,9 @@ public class ReadOnly {
      * request in readonly struct.
      */
     public String lastPendingRequestCtx() {
-        if (readIndexQueue.size() == 0) return "";
-        return readIndexQueue.get(readIndexQueue.size() - 1);
+        if (Lists.size(readIndexQueue) == 0)
+            return "";
+        return readIndexQueue.get(Lists.size(readIndexQueue) - 1);
     }
 
     @Override
@@ -111,7 +112,7 @@ public class ReadOnly {
      */
     public static class ReadState {
         public long index;
-        public byte[] requestCtx;
+        public byte[] requestCtx = new byte[0];
 
         @Override
         public String toString() {
@@ -120,15 +121,9 @@ public class ReadOnly {
     }
 
     public static class ReadIndexStatus {
-        public Message req;
+        public Message req = new Message();
         public long index;
-        public Map<Long, Object> acks;
-
-        public ReadIndexStatus(Message req, long index, Map<Long, Object> acks) {
-            this.req = req;
-            this.index = index;
-            this.acks = acks;
-        }
+        public Map<Long, Object> acks = Maps.of();
 
         @Override
         public String toString() {
