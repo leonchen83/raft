@@ -66,7 +66,7 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <!-- log api -->
         <slf4j.api.version>1.7.25</slf4j.api.version>
-        <protobuf.version>3.16.1</protobuf.version>
+        <protobuf.version>3.16.3</protobuf.version>
     </properties>
 
     <dependencies>
